@@ -993,8 +993,7 @@ function backToRoom() {
     spawnTimer = 300;
     const jz = document.getElementById('joystick-zone');
     if (jz) jz.style.display = '';
-    running = true;
-    loop();
+    startLoop();
 }
 
 function updateMenu() {
@@ -1223,18 +1222,23 @@ videoBackBtn.addEventListener('click', () => {
     menuTransition = 0;
     autoCycleActive = true;
     autoCycleTimer = 0;
-    running = true;
-    loop();
+    startLoop();
 });
 
 // ── Game Loop ───────────────────────────────────────────────────────
 
+let loopRunning = false;
 function loop() {
-    if (!running) return;
+    if (!running) { loopRunning = false; return; }
+    loopRunning = true;
     update();
     draw();
     requestAnimationFrame(loop);
 }
 
-running = true;
-loop();
+function startLoop() {
+    running = true;
+    if (!loopRunning) loop();
+}
+
+startLoop();
