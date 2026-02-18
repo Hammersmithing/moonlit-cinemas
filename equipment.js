@@ -976,7 +976,7 @@ function pxText(text, x, y, color, size) {
     ctx.font = `bold ${size || 10}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, (x - cam.x) * PIXEL, (y - cam.y) * PIXEL);
+    ctx.fillText(text, Math.floor((x - cam.x) * PIXEL), Math.floor((y - cam.y) * PIXEL));
 }
 
 // ── Draw ────────────────────────────────────────────────────────────
@@ -1752,7 +1752,7 @@ function drawTruckParked() {
     px(tx + 15, ty - 1, 2, 2, '#ffee88');
     px(tx - 13, ty + 1, 1, 2, '#cc3333');
 
-    pxText('MOONLIT', tx - 2, ty - 5, '#888', 7);
+    pxText('MOONLIT', tx - 2, ty - 5, '#444', 10);
 }
 
 function drawTruckDriving() {
@@ -1792,7 +1792,7 @@ function drawTruckDriving() {
     px(tx - 4, ty + 10, 2, 1, '#cc3333');
     px(tx + 2, ty + 10, 2, 1, '#cc3333');
 
-    pxText('MOONLIT', tx, ty + 3, '#aaa', 6);
+    pxText('MOONLIT', tx, ty + 3, '#444', 8);
 }
 
 function drawTruckFacingLeft() {
@@ -1835,7 +1835,7 @@ function drawTruckFacingLeft() {
     px(tx - 17, ty - 1, 2, 2, '#ffee88');
     px(tx + 12, ty + 1, 1, 2, '#cc3333');
 
-    pxText('MOONLIT', tx + 2, ty - 5, '#888', 7);
+    pxText('MOONLIT', tx + 2, ty - 5, '#444', 10);
 }
 
 function drawWorkers() {
