@@ -1,0 +1,181 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    color: #fff;
+}
+
+canvas {
+    display: block;
+}
+
+/* Controls Overlay */
+#controls-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.85);
+    animation: fadeIn 0.5s ease;
+}
+
+.controls-box {
+    text-align: center;
+    max-width: 460px;
+    padding: 40px;
+}
+
+.controls-box h1 {
+    font-size: 2.4rem;
+    letter-spacing: 0.3em;
+    margin-bottom: 8px;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(180, 200, 255, 0.5);
+}
+
+.controls-box .subtitle {
+    font-size: 0.95rem;
+    color: #8899aa;
+    letter-spacing: 0.15em;
+    margin-bottom: 40px;
+    text-transform: uppercase;
+}
+
+.controls-instructions {
+    margin-bottom: 32px;
+}
+
+.key-group {
+    margin: 12px 0;
+    font-size: 1rem;
+    color: #aaa;
+}
+
+.key {
+    display: inline-block;
+    background: #222;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.9rem;
+    color: #fff;
+    min-width: 32px;
+    text-align: center;
+}
+
+.hint {
+    color: #667788;
+    font-size: 0.85rem;
+    margin-bottom: 32px;
+}
+
+#start-btn {
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    letter-spacing: 0.2em;
+    padding: 14px 48px;
+    background: transparent;
+    border: 1px solid #fff;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#start-btn:hover {
+    background: #fff;
+    color: #000;
+}
+
+/* Section Overlay */
+.section-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.section-overlay.hidden {
+    display: none;
+}
+
+.back-btn {
+    position: absolute;
+    top: 30px;
+    left: 30px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.95rem;
+    background: transparent;
+    border: 1px solid #555;
+    color: #aaa;
+    padding: 8px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.back-btn:hover {
+    border-color: #fff;
+    color: #fff;
+}
+
+.section-content {
+    max-width: 700px;
+    padding: 40px;
+    text-align: center;
+}
+
+.section-content h2 {
+    font-size: 2rem;
+    letter-spacing: 0.2em;
+    margin-bottom: 24px;
+    text-shadow: 0 0 15px rgba(180, 200, 255, 0.4);
+}
+
+.section-content p {
+    font-size: 1rem;
+    line-height: 1.8;
+    color: #aab;
+    margin-bottom: 16px;
+}
+
+.section-content a {
+    color: #7af;
+    text-decoration: none;
+}
+
+.section-content a:hover {
+    text-decoration: underline;
+}
+
+.section-content ul {
+    list-style: none;
+    margin: 20px 0;
+}
+
+.section-content ul li {
+    padding: 8px 0;
+    color: #aab;
+    font-size: 1rem;
+}
+
+.section-content ul li::before {
+    content: '> ';
+    color: #556;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}

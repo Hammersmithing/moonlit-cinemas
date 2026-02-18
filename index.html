@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moonlit Cinemas — Gaffing Services for Film</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Controls overlay shown on load -->
+    <div id="controls-overlay">
+        <div class="controls-box">
+            <h1>MOONLIT CINEMAS</h1>
+            <p class="subtitle">Gaffing Services for Film</p>
+            <div class="controls-instructions">
+                <div class="key-group">
+                    <span class="key">W</span> or <span class="key">&uarr;</span> Thrust
+                </div>
+                <div class="key-group">
+                    <span class="key">A</span> <span class="key">D</span> or <span class="key">&larr;</span> <span class="key">&rarr;</span> Rotate
+                </div>
+            </div>
+            <p class="hint">Fly into an asteroid to explore</p>
+            <button id="start-btn">LAUNCH</button>
+        </div>
+    </div>
+
+    <!-- Section overlays (shown when hitting an asteroid) -->
+    <div id="section-overlay" class="section-overlay hidden">
+        <button class="back-btn" id="back-btn">&larr; Back to space</button>
+        <div class="section-content" id="section-content"></div>
+    </div>
+
+    <canvas id="game"></canvas>
+    <script src="game.js"></script>
+</body>
+</html>
