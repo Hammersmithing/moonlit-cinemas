@@ -108,6 +108,43 @@ const rocket = {
     radius: 18
 };
 
+// ── Launch Cranes (flanking the rocket) ─────────────────────────────
+
+const cranes = [
+    { x: rocket.x - 50, y: rocket.y + 10, side: 'left',
+      baseX: rocket.x - 50, baseY: rocket.y + 10,
+      phase: 0, t: 0, boomSwing: 0, boomRaise: 0, driveOffset: 0,
+      state: 'working', stateT: 0 },
+    { x: rocket.x + 50, y: rocket.y + 10, side: 'right',
+      baseX: rocket.x + 50, baseY: rocket.y + 10,
+      phase: 2, t: 0, boomSwing: 0, boomRaise: 0, driveOffset: 0,
+      state: 'working', stateT: 0 }
+];
+
+// ── Box Truck & Workers ─────────────────────────────────────────────
+
+const truck = {
+    x: rocket.x + 75,
+    y: rocket.y + 25
+};
+
+// Lights delivered to each crane (index matches cranes[])
+const craneLights = [
+    { placed: false, pickedUp: false,
+      dropX: cranes[0].baseX + 8, dropY: cranes[0].baseY + 5 },
+    { placed: false, pickedUp: false,
+      dropX: cranes[1].baseX - 8, dropY: cranes[1].baseY + 5 }
+];
+
+const workers = {
+    t: 0,
+    phase: 0,   // 0-7: two round trips (right crane first, then left)
+    done: false,
+    w1x: 0, w1y: 0,
+    w2x: 0, w2y: 0,
+    carrying: false
+};
+
 // ── Car ─────────────────────────────────────────────────────────────
 
 const car = {
@@ -158,6 +195,14 @@ const billboards = [
     { label: 'EQUIPMENT', sublabel: 'Full Inventory', direction: 'Straight Ahead', arrow: '\u2191', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 320 }
 ];
 
+// Billboard light flash state (next billboard flickers when you pass one)
+const bbFlash = billboards.map(() => ({
+    triggered: false,
+    timer: 0,
+    count: 0,    // how many on/off cycles completed
+    on: false     // current flash state
+}));
+
 // Remove trees that collide with billboards
 for (let i = scenery.length - 1; i >= 0; i--) {
     const s = scenery[i];
@@ -168,6 +213,29 @@ for (let i = scenery.length - 1; i >= 0; i--) {
             scenery.splice(i, 1);
             break;
         }
+    }
+}
+
+// Remove trees near cranes
+for (let i = scenery.length - 1; i >= 0; i--) {
+    const s = scenery[i];
+    for (const cr of cranes) {
+        const dx = s.x - cr.x;
+        const dy = s.y - cr.y;
+        if (Math.abs(dx) < 30 && Math.abs(dy) < 50) {
+            scenery.splice(i, 1);
+            break;
+        }
+    }
+}
+
+// Remove trees near truck
+for (let i = scenery.length - 1; i >= 0; i--) {
+    const s = scenery[i];
+    const dx = s.x - truck.x;
+    const dy = s.y - truck.y;
+    if (Math.abs(dx) < 35 && Math.abs(dy) < 40) {
+        scenery.splice(i, 1);
     }
 }
 
@@ -570,6 +638,186 @@ function update() {
         }
     }
 
+    // Animate workers — two round trips delivering HMI lights to cranes
+    {
+        const w = workers;
+        if (!w.done) {
+            const truckBackX = truck.x - 10;
+            const truckBackY = truck.y + 8;
+            // Trip 1 → right crane (closer), Trip 2 → left crane (farther)
+            const dest1X = craneLights[1].dropX;
+            const dest1Y = craneLights[1].dropY;
+            const dest2X = craneLights[0].dropX;
+            const dest2Y = craneLights[0].dropY;
+
+            const walkSpeed = 0.25; // game pixels per frame
+
+            if (w.phase === 0 || w.phase === 4) {
+                // Pause at truck
+                w.t += 0.005;
+                w.w1x = truckBackX; w.w1y = truckBackY;
+                w.w2x = truckBackX; w.w2y = truckBackY + 5;
+                w.carrying = false;
+            } else if (w.phase === 1) {
+                // Walk to right crane drop with light
+                const dx = dest1X - truckBackX, dy = dest1Y - truckBackY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                w.t += walkSpeed / Math.max(dist, 1);
+                const p = Math.min(w.t, 1);
+                w.w1x = truckBackX + dx * p;
+                w.w1y = truckBackY + dy * p;
+                w.w2x = w.w1x + 3; w.w2y = w.w1y + 5;
+                w.carrying = true;
+            } else if (w.phase === 2) {
+                // Set down light 1
+                w.t += 0.008;
+                w.w1x = dest1X; w.w1y = dest1Y;
+                w.w2x = dest1X + 3; w.w2y = dest1Y + 5;
+                w.carrying = false;
+                if (!craneLights[1].placed) craneLights[1].placed = true;
+            } else if (w.phase === 3) {
+                // Walk back to truck
+                const dx = truckBackX - dest1X, dy = truckBackY - dest1Y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                w.t += walkSpeed / Math.max(dist, 1);
+                const p = Math.min(w.t, 1);
+                w.w1x = dest1X + dx * p;
+                w.w1y = dest1Y + dy * p;
+                w.w2x = w.w1x + 3; w.w2y = w.w1y + 5;
+                w.carrying = false;
+            } else if (w.phase === 5) {
+                // Walk to left crane drop with light
+                const dx = dest2X - truckBackX, dy = dest2Y - truckBackY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                w.t += walkSpeed / Math.max(dist, 1);
+                const p = Math.min(w.t, 1);
+                w.w1x = truckBackX + dx * p;
+                w.w1y = truckBackY + dy * p;
+                w.w2x = w.w1x + 3; w.w2y = w.w1y + 5;
+                w.carrying = true;
+            } else if (w.phase === 6) {
+                // Set down light 2
+                w.t += 0.008;
+                w.w1x = dest2X; w.w1y = dest2Y;
+                w.w2x = dest2X + 3; w.w2y = dest2Y + 5;
+                w.carrying = false;
+                if (!craneLights[0].placed) craneLights[0].placed = true;
+            } else if (w.phase === 7) {
+                // Walk back to truck
+                const dx = truckBackX - dest2X, dy = truckBackY - dest2Y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                w.t += walkSpeed / Math.max(dist, 1);
+                const p = Math.min(w.t, 1);
+                w.w1x = dest2X + dx * p;
+                w.w1y = dest2Y + dy * p;
+                w.w2x = w.w1x + 3; w.w2y = w.w1y + 5;
+                w.carrying = false;
+            }
+
+            if (w.t >= 1) {
+                w.t = 0;
+                w.phase++;
+                if (w.phase > 7) w.done = true;
+            }
+        } else {
+            // Done — workers idle at truck
+            w.w1x = truck.x - 10; w.w1y = truck.y + 8;
+            w.w2x = truck.x - 7; w.w2y = truck.y + 13;
+            w.carrying = false;
+        }
+    }
+
+    // Animate cranes — state machine: working → pickup → lifting → holding
+    for (let ci = 0; ci < cranes.length; ci++) {
+        const cr = cranes[ci];
+        const cl = craneLights[ci];
+
+        if (cr.state === 'working') {
+            // Normal 3-phase animation (swing, raise, drive)
+            const speed = 0.0015;
+            cr.t += speed;
+            if (cr.t >= 1) {
+                cr.t = 0;
+                cr.phase = (cr.phase + 1) % 3;
+            }
+            const pp = Math.sin(cr.t * Math.PI);
+
+            if (cr.phase === 0) {
+                const dir = cr.side === 'left' ? -1 : 1;
+                cr.boomSwing = pp * 0.2 * dir;
+                cr.boomRaise = 0;
+                cr.driveOffset = 0;
+            } else if (cr.phase === 1) {
+                cr.boomSwing = 0;
+                cr.boomRaise = pp * 0.25;
+                cr.driveOffset = 0;
+            } else {
+                cr.boomSwing = 0;
+                cr.boomRaise = 0;
+                cr.driveOffset = -pp * 6;
+            }
+
+            // Transition to pickup when light is placed
+            if (cl.placed && !cl.pickedUp) {
+                cr.state = 'pickup';
+                cr.stateT = 0;
+                cr.driveOffset = 0;
+            }
+        } else if (cr.state === 'pickup') {
+            // Lower boom to reach the light on the ground
+            cr.stateT += 0.004;
+            cr.boomSwing = 0;
+            cr.boomRaise = cr.boomRaise * (1 - cr.stateT) + (-0.83) * cr.stateT;
+            cr.driveOffset = 0;
+            if (cr.stateT >= 1) {
+                cr.boomRaise = -0.83;
+                cr.state = 'lifting';
+                cr.stateT = 0;
+                cl.pickedUp = true;
+            }
+        } else if (cr.state === 'lifting') {
+            // Raise boom with light attached
+            cr.stateT += 0.003;
+            cr.boomRaise = -0.83 + cr.stateT * 1.03; // -0.83 → 0.2
+            cr.boomSwing = 0;
+            cr.driveOffset = 0;
+            if (cr.stateT >= 1) {
+                cr.boomRaise = 0.2;
+                cr.state = 'holding';
+            }
+        } else if (cr.state === 'holding') {
+            // Hold position with light up
+            cr.boomRaise = 0.2;
+            cr.boomSwing = 0;
+            cr.driveOffset = 0;
+        }
+
+        cr.x = cr.baseX;
+        cr.y = cr.baseY - cr.driveOffset;
+    }
+
+    // Billboard flash triggers — passing one billboard flickers the next (skip index 0)
+    for (let i = billboards.length - 1; i > 1; i--) {
+        if (car.y < billboards[i].y && !bbFlash[i - 1].triggered) {
+            bbFlash[i - 1].triggered = true;
+            bbFlash[i - 1].timer = 0;
+            bbFlash[i - 1].count = 0;
+            bbFlash[i - 1].on = false;
+        }
+    }
+    for (const f of bbFlash) {
+        if (f.triggered && f.count < 4) {
+            f.timer++;
+            // First 2 blinks fast (5 frames), last 2 slow (10 frames)
+            const speed = f.count < 2 ? 5 : 10;
+            if (f.timer >= speed) {
+                f.timer = 0;
+                f.on = !f.on;
+                if (!f.on) f.count++;
+            }
+        }
+    }
+
     // Check destination zones
     for (const dest of destinations) {
         const dx = car.x - dest.x;
@@ -581,6 +829,36 @@ function update() {
             break;
         }
     }
+}
+
+// ── Time-of-Day Lighting ───────────────────────────────────────────
+
+function getDarkness() {
+    const h = new Date().getHours();
+    const m = new Date().getMinutes();
+    const t = h + m / 60;
+    if (t >= 7 && t <= 17) return 0;         // daytime
+    if (t >= 20 || t <= 4) return 0.7;       // full night
+    if (t > 4 && t < 7) return 0.7 * (1 - (t - 4) / 3);   // dawn
+    if (t > 17 && t < 20) return 0.7 * ((t - 17) / 3);     // dusk
+    return 0;
+}
+
+function getTimeTint() {
+    const h = new Date().getHours();
+    const m = new Date().getMinutes();
+    const t = h + m / 60;
+    // Dawn warm tint (5-7)
+    if (t > 5 && t < 7) {
+        const f = 1 - Math.abs(t - 6) / 1;
+        return { r: 60, g: 20, b: 0, a: f * 0.15 };
+    }
+    // Dusk warm tint (17-19)
+    if (t > 17 && t < 19) {
+        const f = 1 - Math.abs(t - 18) / 1;
+        return { r: 80, g: 30, b: 0, a: f * 0.2 };
+    }
+    return null;
 }
 
 // ── Draw Helpers (pixel-scale aware) ────────────────────────────────
@@ -628,12 +906,23 @@ function draw() {
         if (s.y < car.y) drawTree(s.x, s.y);
     }
 
+    // Draw truck & workers (behind car)
+    if (truck.y < car.y) {
+        drawTruck();
+        drawWorkers();
+    }
+
+    // Draw cranes (behind car)
+    for (let i = 0; i < cranes.length; i++) {
+        if (cranes[i].y < car.y) drawCrane(i);
+    }
+
     // Draw rocket (behind car)
     if (rocket.y < car.y) drawRocket();
 
     // Draw billboards (behind car if above, in front if below)
-    for (const bb of billboards) {
-        if (bb.y < car.y) drawBillboard(bb);
+    for (let i = 0; i < billboards.length; i++) {
+        if (billboards[i].y < car.y) drawBillboard(billboards[i], bbFlash[i]);
     }
 
     // Draw destination buildings
@@ -654,16 +943,60 @@ function draw() {
     if (rocket.y >= car.y) drawRocket();
 
     // Draw billboards in front of car
-    for (const bb of billboards) {
-        if (bb.y >= car.y) drawBillboard(bb);
+    for (let i = 0; i < billboards.length; i++) {
+        if (billboards[i].y >= car.y) drawBillboard(billboards[i], bbFlash[i]);
     }
 
     // Draw social billboard (in front of car if below)
     if (socialBillboard.y >= car.y) drawSocialBillboard();
 
+    // Draw cranes (in front of car)
+    for (let i = 0; i < cranes.length; i++) {
+        if (cranes[i].y >= car.y) drawCrane(i);
+    }
+
+    // Draw truck & workers (in front of car)
+    if (truck.y >= car.y) {
+        drawTruck();
+        drawWorkers();
+    }
+
     // Draw scenery in front of car
     for (const s of sorted) {
         if (s.y >= car.y) drawTree(s.x, s.y);
+    }
+
+    // Time-of-day lighting
+    const darkness = getDarkness();
+
+    // Darkness overlay with vignette
+    if (darkness > 0) {
+        ctx.fillStyle = `rgba(5, 5, 30, ${darkness})`;
+        ctx.fillRect(0, 0, W, H);
+
+        // Vignette (darker at edges)
+        const vigGrad = ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 0.7);
+        vigGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        vigGrad.addColorStop(1, `rgba(0, 0, 10, ${darkness * 0.4})`);
+        ctx.fillStyle = vigGrad;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    // Dawn/dusk warm tint
+    const tint = getTimeTint();
+    if (tint) {
+        ctx.fillStyle = `rgba(${tint.r}, ${tint.g}, ${tint.b}, ${tint.a})`;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    // Headlight cones (when dark)
+    if (darkness > 0.1) {
+        drawHeadlightCones(darkness);
+    }
+
+    // Crane-mounted HMI illumination (when dark and lights are lifted)
+    if (darkness > 0.1) {
+        drawCraneLightBeams(darkness);
     }
 
     // HUD
@@ -739,7 +1072,119 @@ function drawRocket() {
     pxText('BACK TO SPACE', rx, ry + 13, '#ccddbb', 13);
 }
 
-function drawBillboard(bb) {
+function drawCrane(idx) {
+    const cr = cranes[idx];
+    const cl = craneLights[idx];
+    const cx = cr.x;
+    const cy = cr.y;
+    const dir = cr.side === 'left' ? 1 : -1; // boom points toward rocket
+
+    const yellow = '#ddaa22';
+    const darkYellow = '#bb8811';
+    const black = '#222';
+
+    // Draw ground HMI (placed but not yet picked up)
+    if (cl.placed && !cl.pickedUp) {
+        drawHMI(cl.dropX, cl.dropY, false);
+    }
+
+    // Tracks (caterpillar treads)
+    px(cx - 8, cy + 1, 16, 4, black);
+    px(cx - 9, cy + 2, 1, 2, '#444');
+    px(cx + 8, cy + 2, 1, 2, '#444');
+
+    // Body / chassis
+    px(cx - 6, cy - 5, 12, 7, yellow);
+    px(cx - 6, cy - 6, 12, 1, darkYellow);
+
+    // Engine housing (back side)
+    px(cx - dir * 4, cy - 8, 6, 4, darkYellow);
+    // Exhaust pipe
+    px(cx - dir * 2, cy - 10, 2, 2, '#444');
+
+    // Cab (operator)
+    px(cx + dir * 2, cy - 10, 5 * dir, 6, yellow);
+    px(cx + dir * 3, cy - 9, 3 * dir, 3, '#446688'); // window
+
+    // Boom arm (angled up toward rocket, animated)
+    const boomLen = 35;
+    const baseBoomRise = 30;
+    const boomRise = baseBoomRise + (cr.boomRaise || 0) * baseBoomRise;
+    const boomStartX = cx + dir * 3;
+    const boomStartY = cy - 10;
+    const swing = (cr.boomSwing || 0) * boomLen;
+    const boomEndX = boomStartX + dir * boomLen + swing * dir;
+    const boomEndY = boomStartY - boomRise;
+
+    // Draw boom as thick angled line
+    const bsx = (boomStartX - cam.x) * PIXEL;
+    const bsy = (boomStartY - cam.y) * PIXEL;
+    const bex = (boomEndX - cam.x) * PIXEL;
+    const bey = (boomEndY - cam.y) * PIXEL;
+
+    ctx.strokeStyle = yellow;
+    ctx.lineWidth = 3 * PIXEL;
+    ctx.beginPath();
+    ctx.moveTo(bsx, bsy);
+    ctx.lineTo(bex, bey);
+    ctx.stroke();
+
+    // Boom lattice cross pattern
+    ctx.strokeStyle = darkYellow;
+    ctx.lineWidth = 1;
+    const steps = 6;
+    for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const mx = bsx + (bex - bsx) * t;
+        const my = bsy + (bey - bsy) * t;
+        const perpX = (bey - bsy) / steps * 0.3;
+        const perpY = -(bex - bsx) / steps * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(mx - perpX, my - perpY);
+        ctx.lineTo(mx + perpX, my + perpY);
+        ctx.stroke();
+    }
+
+    // Cable from boom tip down
+    const cableEndY = boomEndY + 20;
+    const cex = (boomEndX - cam.x) * PIXEL;
+    const cey1 = bey;
+    const cey2 = (cableEndY - cam.y) * PIXEL;
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cex, cey1);
+    ctx.lineTo(cex, cey2);
+    ctx.stroke();
+
+    if (cl.pickedUp) {
+        // Draw HMI attached to hook (lit when holding at night)
+        const isLit = cr.state === 'holding' && getDarkness() > 0.1;
+        drawHMI(boomEndX, cableEndY, true, isLit);
+
+        // Store boom tip position for light beam rendering
+        cl.beamX = boomEndX;
+        cl.beamY = cableEndY;
+    } else {
+        // Regular hook
+        px(boomEndX - 1, cableEndY, 3, 2, '#888');
+        px(boomEndX - (dir > 0 ? 0 : 1), cableEndY + 2, 2, 1, '#888');
+    }
+
+    // Hydraulic cylinder (body to boom)
+    const hydX1 = (cx - cam.x) * PIXEL;
+    const hydY1 = ((cy - 5) - cam.y) * PIXEL;
+    const hydX2 = bsx + (bex - bsx) * 0.35;
+    const hydY2 = bsy + (bey - bsy) * 0.35;
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(hydX1, hydY1);
+    ctx.lineTo(hydX2, hydY2);
+    ctx.stroke();
+}
+
+function drawBillboard(bb, flash) {
     const bw = 62;  // billboard width
     const bh = 48;  // billboard height
 
@@ -809,6 +1254,59 @@ function drawBillboard(bb) {
         ctx.fill();
     }
 
+    // Billboard spotlights (two point sources when dark)
+    const dark = getDarkness();
+    if (dark > 0.1) {
+        const lx = (bb.x - cam.x) * PIXEL;
+        const ly = (bb.y - bh - cam.y) * PIXEL;
+        const lh = bh * PIXEL;
+        const halfW = (bw / 2) * PIXEL;
+        const alpha = Math.min(0.5, dark * 0.7);
+
+        // Two light fixtures (at thirds of sign width)
+        const thirdW = halfW * 2 / 3;
+        const fixtures = [lx - thirdW / 2, lx + thirdW / 2];
+        const flashing = flash && flash.triggered && flash.count < 4;
+
+        for (let fi = 0; fi < fixtures.length; fi++) {
+            const fx = fixtures[fi];
+
+            // Left fixture (fi=0) flickers during flash sequence
+            const isFlashLight = fi === 0 && flashing;
+            const lightOn = isFlashLight ? flash.on : true;
+
+            // Fixture dot
+            ctx.fillStyle = lightOn ? '#ffee88' : '#333';
+            ctx.fillRect(fx - 1.5 * PIXEL, ly - 2 * PIXEL, 3 * PIXEL, 2 * PIXEL);
+
+            if (!lightOn) continue;
+
+            // Triangle beam clipped to billboard face
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(lx - halfW, ly, halfW * 2, lh);
+            ctx.clip();
+
+            ctx.beginPath();
+            ctx.moveTo(fx - 2 * PIXEL, ly);
+            ctx.lineTo(fx + 2 * PIXEL, ly);
+            ctx.lineTo(lx + halfW, ly + lh);
+            ctx.lineTo(lx - halfW, ly + lh);
+            ctx.closePath();
+            ctx.clip();
+
+            const radius = Math.max(lh, halfW) * 1.3;
+            const radGrad = ctx.createRadialGradient(fx, ly, 0, fx, ly + lh * 0.4, radius);
+            radGrad.addColorStop(0, `rgba(255, 240, 160, ${alpha})`);
+            radGrad.addColorStop(0.35, `rgba(255, 240, 160, ${alpha * 0.5})`);
+            radGrad.addColorStop(0.7, `rgba(255, 240, 160, ${alpha * 0.15})`);
+            radGrad.addColorStop(1, 'rgba(255, 240, 160, 0)');
+            ctx.fillStyle = radGrad;
+            ctx.fillRect(lx - halfW, ly, halfW * 2, lh);
+            ctx.restore();
+        }
+    }
+
     // Label (middle, big)
     pxText(bb.label, bb.x, bb.y - bh + 26, C.white, 17);
     // Sublabel (bottom)
@@ -873,8 +1371,8 @@ function drawCar() {
     ctx.fillRect(-4 * s, 2 * s, 1.5 * s, 3 * s);
     ctx.fillRect(2.5 * s, 2 * s, 1.5 * s, 3 * s);
 
-    // Headlights
-    if (car.speed > 0.05) {
+    // Headlights (always on when dark, otherwise when moving)
+    if (car.speed > 0.05 || getDarkness() > 0.1) {
         ctx.fillStyle = '#ffee88';
         ctx.fillRect(-2 * s, -5.5 * s, 1.5 * s, 1 * s);
         ctx.fillRect(0.5 * s, -5.5 * s, 1.5 * s, 1 * s);
@@ -885,6 +1383,38 @@ function drawCar() {
         ctx.fillStyle = '#ff3333';
         ctx.fillRect(-2.5 * s, 4.5 * s, 1.5 * s, 0.8 * s);
         ctx.fillRect(1 * s, 4.5 * s, 1.5 * s, 0.8 * s);
+    }
+
+    ctx.restore();
+}
+
+function drawHeadlightCones(darkness) {
+    const sx = (car.x - cam.x) * PIXEL;
+    const sy = (car.y - cam.y) * PIXEL;
+    const s = PIXEL;
+
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(car.angle);
+
+    const coneLen = 55 * s;
+    const coneW = 12 * s;
+    const alpha = Math.min(0.35, darkness * 0.5);
+
+    // Two headlight cones (left and right headlight positions)
+    const offsets = [-1.5 * s, 1.5 * s];
+    for (const off of offsets) {
+        const grad = ctx.createLinearGradient(5 * s, 0, coneLen, 0);
+        grad.addColorStop(0, `rgba(255, 238, 120, ${alpha})`);
+        grad.addColorStop(0.6, `rgba(255, 238, 120, ${alpha * 0.3})`);
+        grad.addColorStop(1, 'rgba(255, 238, 120, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(5 * s, off);
+        ctx.lineTo(coneLen, off - coneW);
+        ctx.lineTo(coneLen, off + coneW);
+        ctx.closePath();
+        ctx.fill();
     }
 
     ctx.restore();
@@ -985,6 +1515,250 @@ function drawSocialBillboard() {
     } else {
         ctx.fillStyle = '#111';
         ctx.fillRect(imgX, imgY, imgW, imgH);
+    }
+
+    // Spotlights (two point sources when dark)
+    const dark = getDarkness();
+    if (dark > 0.1) {
+        const lx = (bx - cam.x) * PIXEL;
+        const ly = (by - bh - cam.y) * PIXEL;
+        const lh = bh * PIXEL;
+        const halfW = (bw / 2) * PIXEL;
+        const alpha = Math.min(0.5, dark * 0.7);
+
+        const thirdW = halfW * 2 / 3;
+        const fixtures = [lx - thirdW / 2, lx + thirdW / 2];
+        for (const fx of fixtures) {
+            ctx.fillStyle = '#ffee88';
+            ctx.fillRect(fx - 1.5 * PIXEL, ly - 2 * PIXEL, 3 * PIXEL, 2 * PIXEL);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(lx - halfW, ly, halfW * 2, lh);
+            ctx.clip();
+
+            ctx.beginPath();
+            ctx.moveTo(fx - 2 * PIXEL, ly);
+            ctx.lineTo(fx + 2 * PIXEL, ly);
+            ctx.lineTo(lx + halfW, ly + lh);
+            ctx.lineTo(lx - halfW, ly + lh);
+            ctx.closePath();
+            ctx.clip();
+
+            const radius = Math.max(lh, halfW) * 1.3;
+            const radGrad = ctx.createRadialGradient(fx, ly, 0, fx, ly + lh * 0.4, radius);
+            radGrad.addColorStop(0, `rgba(255, 240, 160, ${alpha})`);
+            radGrad.addColorStop(0.35, `rgba(255, 240, 160, ${alpha * 0.5})`);
+            radGrad.addColorStop(0.7, `rgba(255, 240, 160, ${alpha * 0.15})`);
+            radGrad.addColorStop(1, 'rgba(255, 240, 160, 0)');
+            ctx.fillStyle = radGrad;
+            ctx.fillRect(lx - halfW, ly, halfW * 2, lh);
+            ctx.restore();
+        }
+    }
+}
+
+// ── Box Truck Drawing ───────────────────────────────────────────────
+
+function drawTruck() {
+    const tx = truck.x;
+    const ty = truck.y;
+
+    // Shadow
+    px(tx - 14, ty + 6, 28, 4, 'rgba(0,0,0,0.15)');
+
+    // Wheels (back and front axle)
+    px(tx - 12, ty + 4, 4, 3, '#222');
+    px(tx + 8, ty + 4, 4, 3, '#222');
+    // Wheel hubs
+    px(tx - 11, ty + 5, 2, 1, '#555');
+    px(tx + 9, ty + 5, 2, 1, '#555');
+
+    // Chassis / frame rail
+    px(tx - 13, ty + 3, 26, 2, '#444');
+
+    // Box body (big white cargo area)
+    px(tx - 12, ty - 12, 20, 16, '#e8e8e8');
+    // Roof edge
+    px(tx - 12, ty - 13, 20, 1, '#ccc');
+    // Bottom trim
+    px(tx - 12, ty + 3, 20, 1, '#aaa');
+    // Side panels / detail line
+    px(tx - 12, ty - 4, 1, 7, '#bbb');
+    px(tx + 7, ty - 4, 1, 7, '#bbb');
+
+    // Roll-up door (rear, open — visible from side)
+    px(tx - 12, ty - 4, 3, 8, '#999');
+    px(tx - 12, ty - 5, 3, 1, '#888');
+
+    // Cab
+    px(tx + 8, ty - 8, 8, 12, '#ddd');
+    // Cab roof
+    px(tx + 8, ty - 9, 8, 1, '#bbb');
+    // Cab window
+    px(tx + 12, ty - 7, 3, 4, '#446688');
+    // Cab door line
+    px(tx + 11, ty - 6, 1, 8, '#aaa');
+
+    // Front bumper
+    px(tx + 15, ty + 1, 2, 3, '#888');
+
+    // Headlight
+    px(tx + 15, ty - 1, 2, 2, '#ffee88');
+    // Tail light
+    px(tx - 13, ty + 1, 1, 2, '#cc3333');
+
+    // "MOONLIT" text on box body
+    pxText('MOONLIT', tx - 2, ty - 5, '#888', 7);
+}
+
+// ── Workers Drawing ─────────────────────────────────────────────────
+
+function drawWorkers() {
+    const w = workers;
+    const walking = w.phase === 1 || w.phase === 3 || w.phase === 5 || w.phase === 7;
+
+    // Draw carried HMI between workers
+    if (w.carrying) {
+        const midX = (w.w1x + w.w2x) / 2;
+        const midY = (w.w1y + w.w2y) / 2;
+        drawHMI(midX, midY, true);
+    }
+
+    // Worker 1 (front)
+    drawWorkerFigure(w.w1x, w.w1y, walking);
+
+    // Worker 2 (behind, slightly offset)
+    drawWorkerFigure(w.w2x, w.w2y, walking);
+}
+
+function drawHMI(x, y, carried, litUp) {
+    // Arri 15K HMI — big chunky fresnel light
+    const lx = x;
+    const ly = carried ? y - 1 : y + 1;
+
+    // Yoke / stirrup (U-shaped mounting bracket)
+    px(lx - 4, ly - 2, 1, 5, '#666');
+    px(lx + 4, ly - 2, 1, 5, '#666');
+    px(lx - 4, ly + 3, 9, 1, '#666');
+
+    // Light body (big barrel shape)
+    px(lx - 3, ly - 3, 7, 6, '#333');
+    px(lx - 2, ly - 4, 5, 1, '#444');
+
+    // Lens face (front) — glows bright when lit
+    const dark = getDarkness();
+    const isLit = litUp || (carried && dark > 0.1);
+    px(lx - 2, ly - 2, 5, 3, isLit ? '#ffe8a0' : '#556');
+    px(lx - 1, ly - 1, 3, 1, isLit ? '#fff4cc' : '#668');
+
+    // Rear housing (ballast/connector area)
+    px(lx - 3, ly + 2, 7, 2, '#2a2a2a');
+
+    // Cable dangling from back
+    px(lx + 1, ly + 4, 1, 2, '#333');
+    px(lx + 2, ly + 5, 1, 2, '#333');
+
+    // Label
+    if (!carried) {
+        pxText('15K', lx + 1, ly - 6, '#999', 6);
+    }
+}
+
+function drawWorkerFigure(x, y, walking) {
+    // Hard hat
+    px(x - 1, y - 6, 3, 2, '#ddaa22');
+    // Head
+    px(x, y - 4, 2, 2, '#ddb88c');
+    // Body (work vest)
+    px(x - 1, y - 2, 3, 4, '#dd8822');
+    // Hi-vis stripe
+    px(x - 1, y - 1, 3, 1, '#ffee44');
+    // Legs
+    if (walking) {
+        // Walking — legs offset for stride
+        const stride = Math.sin(Date.now() * 0.01) * 1.5;
+        px(x - 1, y + 2, 1, 3, '#336');
+        px(x + 1, y + 2, 1, 3, '#336');
+        // Slight horizontal movement for walking effect
+        px(x - 1 + (stride > 0 ? 1 : 0), y + 5, 1, 1, '#222');
+        px(x + 1 + (stride > 0 ? 0 : 1), y + 5, 1, 1, '#222');
+    } else {
+        // Standing
+        px(x - 1, y + 2, 1, 3, '#336');
+        px(x + 1, y + 2, 1, 3, '#336');
+        // Boots
+        px(x - 1, y + 5, 1, 1, '#222');
+        px(x + 1, y + 5, 1, 1, '#222');
+    }
+    // Arms
+    px(x - 2, y - 2, 1, 3, '#ddb88c');
+    px(x + 2, y - 2, 1, 3, '#ddb88c');
+}
+
+// ── Crane Light Beams (HMIs illuminating rocket at night) ───────────
+
+function drawCraneLightBeams(darkness) {
+    for (let i = 0; i < cranes.length; i++) {
+        const cl = craneLights[i];
+        if (!cl.pickedUp || cranes[i].state !== 'holding') continue;
+
+        const alpha = Math.min(0.45, darkness * 0.6);
+
+        // HMI lens glow
+        const glowX = (cl.beamX - cam.x) * PIXEL;
+        const glowY = (cl.beamY - cam.y) * PIXEL;
+        const glowRad = 8 * PIXEL;
+        const glowGrad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowRad);
+        glowGrad.addColorStop(0, `rgba(255, 250, 220, ${alpha * 0.8})`);
+        glowGrad.addColorStop(0.3, `rgba(255, 240, 180, ${alpha * 0.3})`);
+        glowGrad.addColorStop(1, 'rgba(255, 240, 180, 0)');
+        ctx.fillStyle = glowGrad;
+        ctx.fillRect(glowX - glowRad, glowY - glowRad, glowRad * 2, glowRad * 2);
+
+        // Cone of light from HMI down toward rocket area
+        const lightX = (cl.beamX - cam.x) * PIXEL;
+        const lightY = (cl.beamY - cam.y) * PIXEL;
+        const targetX = (rocket.x - cam.x) * PIXEL;
+        const targetY = (rocket.y + 10 - cam.y) * PIXEL;
+
+        // Direction from light to target
+        const dx = targetX - lightX;
+        const dy = targetY - lightY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        // Perpendicular for cone spread
+        const px2 = -ny;
+        const py2 = nx;
+        const spread = 25 * PIXEL;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(lightX - px2 * 3, lightY - py2 * 3);
+        ctx.lineTo(lightX + px2 * 3, lightY + py2 * 3);
+        ctx.lineTo(targetX + px2 * spread, targetY + py2 * spread);
+        ctx.lineTo(targetX - px2 * spread, targetY - py2 * spread);
+        ctx.closePath();
+        ctx.clip();
+
+        const beamGrad = ctx.createRadialGradient(
+            lightX, lightY, 0,
+            lightX + dx * 0.5, lightY + dy * 0.5, dist * 0.8
+        );
+        beamGrad.addColorStop(0, `rgba(255, 245, 200, ${alpha})`);
+        beamGrad.addColorStop(0.3, `rgba(255, 245, 200, ${alpha * 0.4})`);
+        beamGrad.addColorStop(0.7, `rgba(255, 245, 200, ${alpha * 0.1})`);
+        beamGrad.addColorStop(1, 'rgba(255, 245, 200, 0)');
+        ctx.fillStyle = beamGrad;
+        ctx.fillRect(
+            Math.min(lightX, targetX) - spread,
+            Math.min(lightY, targetY) - spread,
+            Math.abs(dx) + spread * 2,
+            Math.abs(dy) + spread * 2
+        );
+        ctx.restore();
     }
 }
 
