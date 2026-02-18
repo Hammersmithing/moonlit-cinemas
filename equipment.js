@@ -467,6 +467,32 @@ const inventoryData = {
     }
 };
 
+// ── Social Billboard (top-left of crossing) ────────────────────────
+
+const socialVideo = document.createElement('video');
+socialVideo.src = 'social-video.mp4';
+socialVideo.loop = true;
+socialVideo.muted = true;
+socialVideo.playsInline = true;
+socialVideo.preload = 'auto';
+let socialPlaying = false;
+
+const socialBillboard = {
+    x: CROSS_X - 80,
+    y: CROSS_Y - 25,
+    viewDist: 120
+};
+
+// Remove trees near social billboard
+for (let i = scenery.length - 1; i >= 0; i--) {
+    const s = scenery[i];
+    const dx = s.x - socialBillboard.x;
+    const dy = s.y - socialBillboard.y;
+    if (Math.abs(dx) < 65 && Math.abs(dy) < 65) {
+        scenery.splice(i, 1);
+    }
+}
+
 // ── Update ──────────────────────────────────────────────────────────
 
 function update() {
@@ -527,6 +553,20 @@ function update() {
         if (Math.sqrt(dx * dx + dy * dy) < rocket.radius) {
             window.location.href = 'index.html';
             return;
+        }
+    }
+
+    // Social billboard — play/pause video based on distance
+    {
+        const dx = car.x - socialBillboard.x;
+        const dy = car.y - socialBillboard.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < socialBillboard.viewDist && !socialPlaying) {
+            socialVideo.play().catch(() => {});
+            socialPlaying = true;
+        } else if (dist >= socialBillboard.viewDist && socialPlaying) {
+            socialVideo.pause();
+            socialPlaying = false;
         }
     }
 
@@ -601,6 +641,9 @@ function draw() {
         drawBuilding(dest.x, dest.y, dest.label);
     }
 
+    // Draw social billboard (behind car if above)
+    if (socialBillboard.y < car.y) drawSocialBillboard();
+
     // Draw crossroads signs
     drawCrossroadsSigns();
 
@@ -614,6 +657,9 @@ function draw() {
     for (const bb of billboards) {
         if (bb.y >= car.y) drawBillboard(bb);
     }
+
+    // Draw social billboard (in front of car if below)
+    if (socialBillboard.y >= car.y) drawSocialBillboard();
 
     // Draw scenery in front of car
     for (const s of sorted) {
@@ -902,6 +948,45 @@ invBackBtn.addEventListener('click', () => {
     running = true;
     loop();
 });
+
+// ── Social Billboard Drawing & Overlay ──────────────────────────────
+
+function drawSocialBillboard() {
+    const bx = socialBillboard.x;
+    const by = socialBillboard.y;
+    const bw = 75;
+    const bh = 120;
+
+    // Posts (legs stop before road)
+    const legH = Math.min(10, (CROSS_Y - ROAD_W / 2) - by - 1);
+    if (legH > 0) {
+        px(bx - 24, by, 5, legH, C.sign);
+        px(bx + 20, by, 5, legH, C.sign);
+    }
+
+    // Board background
+    px(bx - bw / 2, by - bh, bw, bh, '#0a0a1a');
+    // Border
+    px(bx - bw / 2, by - bh, bw, 3, '#4488cc');
+    px(bx - bw / 2, by - 3, bw, 3, '#4488cc');
+    px(bx - bw / 2, by - bh, 3, bh, '#4488cc');
+    px(bx + bw / 2 - 3, by - bh, 3, bh, '#4488cc');
+
+    // Draw video frame on the billboard
+    const pad = 4;
+    const imgX = Math.floor((bx - bw / 2 + pad - cam.x) * PIXEL);
+    const imgY = Math.floor((by - bh + pad - cam.y) * PIXEL);
+    const imgW = Math.ceil((bw - pad * 2) * PIXEL);
+    const imgH = Math.ceil((bh - pad * 2) * PIXEL);
+
+    if (socialVideo.readyState >= 2) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(socialVideo, imgX, imgY, imgW, imgH);
+    } else {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(imgX, imgY, imgW, imgH);
+    }
+}
 
 // ── Game Loop ───────────────────────────────────────────────────────
 
