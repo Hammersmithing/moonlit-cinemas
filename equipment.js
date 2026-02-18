@@ -557,7 +557,7 @@ function px(x, y, w, h, color) {
 
 function pxText(text, x, y, color, size) {
     ctx.fillStyle = color;
-    ctx.font = `${size || 10}px "Courier New", monospace`;
+    ctx.font = `bold ${size || 10}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, (x - cam.x) * PIXEL, (y - cam.y) * PIXEL);
@@ -694,12 +694,12 @@ function drawRocket() {
 }
 
 function drawBillboard(bb) {
-    const bw = 60;  // billboard width
-    const bh = 44;  // billboard height (taller for extra line)
+    const bw = 62;  // billboard width
+    const bh = 46;  // billboard height
 
     // Posts (two legs)
-    px(bb.x - 8, bb.y, 2, 12, C.sign);
-    px(bb.x + 6, bb.y, 2, 12, C.sign);
+    px(bb.x - 8, bb.y, 3, 12, C.sign);
+    px(bb.x + 6, bb.y, 3, 12, C.sign);
 
     // Board background
     px(bb.x - bw / 2, bb.y - bh, bw, bh, '#111a11');
@@ -710,11 +710,11 @@ function drawBillboard(bb) {
     px(bb.x + bw / 2 - 2, bb.y - bh, 2, bh, '#667744');
 
     // Direction + Arrow (top)
-    pxText(bb.arrow + ' ' + bb.direction, bb.x, bb.y - bh + 9, C.arrow, 10);
+    pxText(bb.arrow + ' ' + bb.direction, bb.x, bb.y - bh + 12, C.arrow, 13);
     // Label (middle, big)
-    pxText(bb.label, bb.x, bb.y - bh + 22, C.white, 14);
+    pxText(bb.label, bb.x, bb.y - bh + 28, C.white, 17);
     // Sublabel (bottom)
-    pxText(bb.sublabel, bb.x, bb.y - bh + 35, '#889988', 10);
+    pxText(bb.sublabel, bb.x, bb.y - bh + 43, '#ccddbb', 13);
 }
 
 function drawCrossroadsSigns() {
