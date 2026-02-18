@@ -59,13 +59,13 @@ const ROOM_W = 540;
 const ROOM_H = 420;
 
 const furniture = {
-    couch:   { x: 240, y: 120, w: 150, h: 54 },
+    couch:   { x: 240, y: 190, w: 150, h: 54 },
     tv:      { x: 270, y: 28, w: 90, h: 28 },
-    table:   { x: 279, y: 75, w: 72, h: 36 },
+    table:   { x: 279, y: 145, w: 72, h: 36 },
     counter: { x: 30, y: 45, w: 105, h: 42 },
     door:    { x: 240, y: 378, w: 60, h: 42 },
-    rug:     { x: 210, y: 60, w: 210, h: 170 },
-    lamp1:   { x: 220, y: 120, w: 16, h: 50 },   // floor lamp left of couch
+    rug:     { x: 210, y: 120, w: 210, h: 170 },
+    lamp1:   { x: 220, y: 180, w: 16, h: 50 },   // floor lamp left of couch
     plant:   { x: 460, y: 330, w: 40, h: 60 },    // potted plant bottom-right
     shelf:   { x: 30, y: 280, w: 80, h: 20 },     // bookshelf
     poster:  { x: 420, y: 16, w: 90, h: 110 }      // hire me poster on wall
@@ -73,7 +73,7 @@ const furniture = {
 
 const items = {
     popcorn: { x: 66, y: 52, w: 24, h: 24, collected: false },
-    remote:  { x: 303, y: 81, w: 18, h: 12, collected: false }
+    remote:  { x: 303, y: 151, w: 18, h: 12, collected: false }
 };
 
 // ── Player ──────────────────────────────────────────────────────────
@@ -498,11 +498,7 @@ function draw() {
     ctx.lineTo(roomOX + lamp.x + 16, roomOY + lamp.y + 16);
     ctx.closePath();
     ctx.fill();
-    // Light glow
-    ctx.fillStyle = 'rgba(255,240,180,0.08)';
-    ctx.beginPath();
-    ctx.arc(roomOX + lamp.x + 8, roomOY + lamp.y + 10, 50, 0, Math.PI * 2);
-    ctx.fill();
+    // Light glow drawn after couch (see below)
 
     // ── Potted plant ──
     const plant = furniture.plant;
@@ -544,6 +540,12 @@ function draw() {
     // Pillows (on back, bottom portion)
     roundRect(couch.x + 6, couch.y + couch.h - 22, 20, 14, 3, '#4a6590');
     roundRect(couch.x + couch.w - 26, couch.y + couch.h - 22, 20, 14, 3, '#4a6590');
+
+    // Lamp light glow (drawn on top of couch)
+    ctx.fillStyle = 'rgba(255,240,180,0.08)';
+    ctx.beginPath();
+    ctx.arc(roomOX + lamp.x + 8, roomOY + lamp.y + 10, 51, 0, Math.PI * 2);
+    ctx.fill();
 
     // Couch glow when target
     if (step === 1) {
