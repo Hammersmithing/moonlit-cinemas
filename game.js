@@ -20,6 +20,7 @@ document.body.addEventListener('touchmove', e => {
 // ── State ───────────────────────────────────────────────────────────
 
 let running = false;
+let hintAlpha = 0;
 const keys = {};
 
 window.addEventListener('keydown', e => { keys[e.key] = true; });
@@ -213,11 +214,11 @@ let flashAlpha = 0;
 
 function update() {
     // Rotation
-    if (keys['a'] || keys['A'] || keys['ArrowLeft']) ship.angle -= ship.rotSpeed;
-    if (keys['d'] || keys['D'] || keys['ArrowRight']) ship.angle += ship.rotSpeed;
+    if (keys['ArrowLeft']) ship.angle -= ship.rotSpeed;
+    if (keys['ArrowRight']) ship.angle += ship.rotSpeed;
 
     // Thrust
-    ship.thrust = (keys['w'] || keys['W'] || keys['ArrowUp']) ? 1 : 0;
+    ship.thrust = keys['ArrowUp'] ? 1 : 0;
 
     // Joystick input — point ship toward joystick direction and thrust proportionally
     if (joystick.active && joystick.magnitude > 0.15) {
@@ -386,6 +387,16 @@ function draw() {
         ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
+
+    // Hint text (shown after launch)
+    if (hintAlpha > 0) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${hintAlpha})`;
+        ctx.font = '15px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('LAND ON AN ASTEROID TO EXPLORE', canvas.width / 2, canvas.height / 2 - 40);
+        hintAlpha -= 0.0015;
+    }
 }
 
 // ── Direction Indicators ────────────────────────────────────────────
@@ -485,18 +496,19 @@ const startBtn = document.getElementById('start-btn');
 startBtn.addEventListener('click', () => {
     controlsOverlay.style.display = 'none';
     running = true;
+    hintAlpha = 1;
     canvas.focus();
     loop();
 });
 
-// Also allow Enter to start
+// Also allow Enter or arrow keys to start
 window.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && controlsOverlay.style.display !== 'none') {
+    if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && controlsOverlay.style.display !== 'none') {
         startBtn.click();
     }
 });
 
-// Auto-open Hire Me if linked with #hire
+// Auto-open Hire Me if linked with #hire (warp is skipped at bottom)
 if (window.location.hash === '#hire') {
     controlsOverlay.style.display = 'none';
     running = true;
@@ -513,7 +525,8 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// Draw the initial stars in background even before start
+// ── Idle Background (twinkling stars behind overlay) ───────────────
+
 function drawBackground() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (const s of stars) {
@@ -527,4 +540,94 @@ function drawBackground() {
     }
     if (!running) requestAnimationFrame(drawBackground);
 }
-drawBackground();
+
+// ── Warp Speed Intro ──────────────────────────────────────────────
+
+// Hide controls overlay until warp finishes (skip if #hire already started)
+if (!running) {
+    controlsOverlay.style.display = 'none';
+}
+
+const warpStars = [];
+for (let i = 0; i < 400; i++) {
+    warpStars.push({
+        x: (Math.random() - 0.5) * 2000,
+        y: (Math.random() - 0.5) * 2000,
+        z: Math.random() * 1500 + 1
+    });
+}
+
+let warpFrame = 0;
+const WARP_RAMP = 20;
+const WARP_FULL = 50;
+const WARP_DECEL = 60;
+const WARP_MAX_SPEED = 28;
+
+function warpLoop() {
+    // Trailing fade for streak effect
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    warpFrame++;
+
+    let speed;
+    if (warpFrame <= WARP_RAMP) {
+        speed = WARP_MAX_SPEED * (warpFrame / WARP_RAMP);
+    } else if (warpFrame <= WARP_RAMP + WARP_FULL) {
+        speed = WARP_MAX_SPEED;
+    } else {
+        const t = (warpFrame - WARP_RAMP - WARP_FULL) / WARP_DECEL;
+        speed = WARP_MAX_SPEED * Math.max(0, 1 - t * t);
+        if (t >= 1) {
+            // Warp complete — clear trails, show overlay, start idle bg
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            controlsOverlay.style.display = 'flex';
+            controlsOverlay.style.animation = 'fadeIn 1s ease';
+            drawBackground();
+            return;
+        }
+    }
+
+    for (const s of warpStars) {
+        const prevZ = s.z;
+        s.z -= speed;
+        if (s.z <= 1) {
+            s.x = (Math.random() - 0.5) * 2000;
+            s.y = (Math.random() - 0.5) * 2000;
+            s.z = 1500;
+        }
+
+        const scale = 300;
+        const sx = (s.x / s.z) * scale + cx;
+        const sy = (s.y / s.z) * scale + cy;
+        const px = (s.x / prevZ) * scale + cx;
+        const py = (s.y / prevZ) * scale + cy;
+
+        const bright = Math.min(1, (1 - s.z / 1500) * 2);
+
+        // 8-bit feel: pixelated rects when slow, streaks when fast
+        if (speed > 5) {
+            ctx.strokeStyle = `rgba(180, 210, 255, ${bright})`;
+            ctx.lineWidth = Math.max(1, bright * 2.5);
+            ctx.beginPath();
+            ctx.moveTo(Math.round(px), Math.round(py));
+            ctx.lineTo(Math.round(sx), Math.round(sy));
+            ctx.stroke();
+        } else {
+            const size = Math.max(1, bright * 3);
+            ctx.fillStyle = `rgba(255, 255, 255, ${bright})`;
+            ctx.fillRect(Math.round(sx) - size / 2, Math.round(sy) - size / 2, size, size);
+        }
+    }
+
+    requestAnimationFrame(warpLoop);
+}
+
+// Skip warp if #hire already opened a section
+if (!running) {
+    warpLoop();
+}
