@@ -420,22 +420,26 @@ function drawDirectionIndicators() {
         ctx.translate(ix, iy);
         ctx.rotate(angle);
 
-        const alpha = Math.max(0.3, 1 - dist / 2000);
-        ctx.strokeStyle = `rgba(150, 170, 200, ${alpha})`;
-        ctx.lineWidth = 1.5;
+        const alpha = Math.max(0.6, 1 - dist / 2000);
+        const blink = (Math.sin(Date.now() * 0.006) + 1) / 2; // 0..1 oscillation
+        const r = Math.round(255);
+        const g = Math.round(255 * blink);
+        const b = Math.round(255 * blink);
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.moveTo(10, 0);
-        ctx.lineTo(-4, -5);
-        ctx.moveTo(10, 0);
-        ctx.lineTo(-4, 5);
+        ctx.moveTo(14, 0);
+        ctx.lineTo(-6, -7);
+        ctx.moveTo(14, 0);
+        ctx.lineTo(-6, 7);
         ctx.stroke();
 
         // Label
         ctx.rotate(-angle);
-        ctx.fillStyle = `rgba(150, 170, 200, ${alpha})`;
-        ctx.font = '11px "Courier New", monospace';
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.font = 'bold 13px "Courier New", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(a.label.toUpperCase(), 0, -14);
+        ctx.fillText(a.label.toUpperCase(), 0, -18);
 
         ctx.restore();
     }
