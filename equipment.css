@@ -57,6 +57,15 @@ canvas {
     color: #fff;
 }
 
+.back-btn {
+    animation: btnPulse 2s ease-in-out infinite;
+}
+
+@keyframes btnPulse {
+    0%, 100% { border-color: #444; color: #aaa; }
+    50% { border-color: #88aacc; color: #fff; }
+}
+
 /* Receipt / inventory styling */
 .inventory-content {
     max-width: 500px;

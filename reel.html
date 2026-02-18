@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reel — Moonlit Cinemas</title>
+    <link rel="stylesheet" href="reel.css">
+</head>
+<body>
+    <canvas id="game"></canvas>
+
+    <!-- Video overlay -->
+    <div id="video-overlay" class="overlay hidden">
+        <button class="back-btn" id="video-back-btn">&#8592; Back to menu</button>
+        <div id="video-container"></div>
+    </div>
+
+    <!-- Virtual joystick (touch devices) -->
+    <div id="joystick-zone" class="mobile-only">
+        <div id="joystick-base">
+            <div id="joystick-knob"></div>
+        </div>
+    </div>
+
+    <script src="reel.js"></script>
+</body>
+</html>

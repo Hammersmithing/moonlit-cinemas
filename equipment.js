@@ -100,6 +100,14 @@ const CROSS_X = 0;       // crossroads X center
 const START_Y = 400;     // car start offset below crossroads (longer approach)
 const ZONE_DIST = 120;   // distance from crossroads to trigger zone
 
+// ── Rocket (back to space) ───────────────────────────────────────────
+
+const rocket = {
+    x: CROSS_X,
+    y: CROSS_Y + START_Y + 60,
+    radius: 18
+};
+
 // ── Car ─────────────────────────────────────────────────────────────
 
 const car = {
@@ -512,6 +520,16 @@ function update() {
     cam.x += (car.x - GW / 2 - cam.x) * 0.08;
     cam.y += (car.y - GH / 2 - cam.y) * 0.08;
 
+    // Check rocket (back to space)
+    {
+        const dx = car.x - rocket.x;
+        const dy = car.y - rocket.y;
+        if (Math.sqrt(dx * dx + dy * dy) < rocket.radius) {
+            window.location.href = 'index.html';
+            return;
+        }
+    }
+
     // Check destination zones
     for (const dest of destinations) {
         const dx = car.x - dest.x;
@@ -570,6 +588,9 @@ function draw() {
         if (s.y < car.y) drawTree(s.x, s.y);
     }
 
+    // Draw rocket (behind car)
+    if (rocket.y < car.y) drawRocket();
+
     // Draw billboards (behind car if above, in front if below)
     for (const bb of billboards) {
         if (bb.y < car.y) drawBillboard(bb);
@@ -585,6 +606,9 @@ function draw() {
 
     // Draw car
     drawCar();
+
+    // Draw rocket (in front of car)
+    if (rocket.y >= car.y) drawRocket();
 
     // Draw billboards in front of car
     for (const bb of billboards) {
@@ -637,6 +661,36 @@ function drawBuilding(x, y, label) {
     px(x - 2, y + 2, 5, 6, C.buildingDoor);
     // Label
     pxText(label, x, y - 5, C.white, 9);
+}
+
+function drawRocket() {
+    const rx = rocket.x;
+    const ry = rocket.y;
+
+    // Landing pad (circle-ish)
+    px(rx - 12, ry + 4, 24, 3, '#333344');
+    px(rx - 10, ry + 7, 20, 2, '#2a2a3a');
+
+    // Exhaust glow (subtle)
+    const flicker = 0.5 + Math.random() * 0.3;
+    px(rx - 3, ry + 2, 6, 3, `rgba(255,150,50,${flicker * 0.3})`);
+
+    // Rocket body
+    px(rx - 4, ry - 14, 8, 18, '#ccccdd');
+    // Dark stripe
+    px(rx - 4, ry - 4, 8, 3, '#8888aa');
+    // Nose cone
+    px(rx - 3, ry - 18, 6, 4, '#ee4444');
+    px(rx - 2, ry - 20, 4, 2, '#ee4444');
+    px(rx - 1, ry - 22, 2, 2, '#ee4444');
+    // Window
+    px(rx - 1.5, ry - 12, 3, 3, '#446688');
+    // Fins
+    px(rx - 7, ry, 3, 5, '#cc3333');
+    px(rx + 4, ry, 3, 5, '#cc3333');
+
+    // Label
+    pxText('BACK TO SPACE', rx, ry + 16, '#8899aa', 9);
 }
 
 function drawBillboard(bb) {
@@ -747,27 +801,7 @@ function drawHUD() {
     const hint = isTouchDevice ? 'Use the joystick to drive' : 'WASD or Arrow Keys to drive';
     ctx.fillText(hint, W / 2, H - 20);
 
-    // "Back to space" link top-left
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '11px "Courier New", monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('< BACK TO SPACE', 16, 24);
 }
-
-// ── Back to space (click top-left) ──────────────────────────────────
-
-canvas.addEventListener('click', e => {
-    if (e.clientX < 160 && e.clientY < 40) {
-        window.location.href = 'index.html';
-    }
-});
-
-canvas.addEventListener('touchend', e => {
-    const t = e.changedTouches[0];
-    if (t.clientX < 160 && t.clientY < 40) {
-        window.location.href = 'index.html';
-    }
-});
 
 // ── Inventory Overlay ───────────────────────────────────────────────
 

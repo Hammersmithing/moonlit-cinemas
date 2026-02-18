@@ -455,6 +455,11 @@ function openSection(label) {
         window.location.href = 'equipment.html';
         return;
     }
+    // Reel opens the living room game
+    if (label === 'Reel') {
+        window.location.href = 'reel.html';
+        return;
+    }
     running = false;
     sectionContentEl.innerHTML = sectionContent[label] || `<h2>${label}</h2><p>Coming soon.</p>`;
     sectionOverlay.classList.remove('hidden');
@@ -486,6 +491,14 @@ window.addEventListener('keydown', e => {
         startBtn.click();
     }
 });
+
+// Auto-open Hire Me if linked with #hire
+if (window.location.hash === '#hire') {
+    controlsOverlay.style.display = 'none';
+    running = true;
+    openSection('Hire Me');
+    window.location.hash = '';
+}
 
 // ── Game Loop ───────────────────────────────────────────────────────
 
