@@ -97,7 +97,7 @@ const C = {
 const ROAD_W = 28;       // road width in game pixels
 const CROSS_Y = 0;       // crossroads Y center
 const CROSS_X = 0;       // crossroads X center
-const START_Y = 180;     // car start offset below crossroads
+const START_Y = 400;     // car start offset below crossroads (longer approach)
 const ZONE_DIST = 120;   // distance from crossroads to trigger zone
 
 // ── Car ─────────────────────────────────────────────────────────────
@@ -127,8 +127,8 @@ let arrived = null; // which zone the car reached
 
 const scenery = [];
 
-// Trees along the main road (vertical)
-for (let y = -250; y <= 300; y += 18 + Math.floor(Math.random() * 12)) {
+// Trees along the main road (vertical) — extended for longer approach
+for (let y = -250; y <= START_Y + 50; y += 18 + Math.floor(Math.random() * 12)) {
     if (Math.abs(y - CROSS_Y) < 40) continue; // gap at crossroads
     scenery.push({ type: 'tree', x: CROSS_X - ROAD_W / 2 - 8 - Math.random() * 15, y });
     scenery.push({ type: 'tree', x: CROSS_X + ROAD_W / 2 + 8 + Math.random() * 15, y });
@@ -139,6 +139,28 @@ for (let x = -250; x <= 250; x += 18 + Math.floor(Math.random() * 12)) {
     if (Math.abs(x - CROSS_X) < 40) continue;
     scenery.push({ type: 'tree', x, y: CROSS_Y - ROAD_W / 2 - 8 - Math.random() * 15 });
     scenery.push({ type: 'tree', x, y: CROSS_Y + ROAD_W / 2 + 8 + Math.random() * 15 });
+}
+
+// ── Billboards along the approach road ──────────────────────────────
+
+const BB_OFFSET = ROAD_W / 2 + 34;
+const billboards = [
+    { label: 'GRIP GEAR', sublabel: 'Stands & Rigging', direction: 'Turn Right', arrow: '>', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 100 },
+    { label: 'LIGHTS', sublabel: 'Fixtures & Mods', direction: 'Turn Left', arrow: '<', x: CROSS_X - BB_OFFSET, y: CROSS_Y + 210 },
+    { label: 'EQUIPMENT', sublabel: 'Full Inventory', direction: 'Straight Ahead', arrow: '^', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 320 }
+];
+
+// Remove trees that collide with billboards
+for (let i = scenery.length - 1; i >= 0; i--) {
+    const s = scenery[i];
+    for (const bb of billboards) {
+        const dx = s.x - bb.x;
+        const dy = s.y - bb.y;
+        if (Math.abs(dx) < 40 && Math.abs(dy) < 28) {
+            scenery.splice(i, 1);
+            break;
+        }
+    }
 }
 
 // Destination buildings
@@ -548,6 +570,11 @@ function draw() {
         if (s.y < car.y) drawTree(s.x, s.y);
     }
 
+    // Draw billboards (behind car if above, in front if below)
+    for (const bb of billboards) {
+        if (bb.y < car.y) drawBillboard(bb);
+    }
+
     // Draw destination buildings
     for (const dest of destinations) {
         drawBuilding(dest.x, dest.y, dest.label);
@@ -559,6 +586,11 @@ function draw() {
     // Draw car
     drawCar();
 
+    // Draw billboards in front of car
+    for (const bb of billboards) {
+        if (bb.y >= car.y) drawBillboard(bb);
+    }
+
     // Draw scenery in front of car
     for (const s of sorted) {
         if (s.y >= car.y) drawTree(s.x, s.y);
@@ -569,15 +601,15 @@ function draw() {
 }
 
 function drawRoads() {
-    // Vertical road (main road going up from start to Equipment)
-    px(CROSS_X - ROAD_W / 2, CROSS_Y - 200, ROAD_W, 400, C.road);
+    // Vertical road (extended for longer approach)
+    px(CROSS_X - ROAD_W / 2, CROSS_Y - 200, ROAD_W, START_Y + 250, C.road);
 
     // Horizontal road (left to Lights, right to Grip)
     px(CROSS_X - 200, CROSS_Y - ROAD_W / 2, 400, ROAD_W, C.road);
 
-    // Center line dashes — vertical
-    for (let y = CROSS_Y - 200; y < CROSS_Y + 200; y += 8) {
-        if (Math.abs(y - CROSS_Y) < ROAD_W / 2) continue; // skip crossroads center
+    // Center line dashes — vertical (extended)
+    for (let y = CROSS_Y - 200; y < CROSS_Y + START_Y + 50; y += 8) {
+        if (Math.abs(y - CROSS_Y) < ROAD_W / 2) continue;
         px(CROSS_X - 0.5, y, 1, 4, C.roadLine);
     }
 
@@ -605,6 +637,30 @@ function drawBuilding(x, y, label) {
     px(x - 2, y + 2, 5, 6, C.buildingDoor);
     // Label
     pxText(label, x, y - 5, C.white, 9);
+}
+
+function drawBillboard(bb) {
+    const bw = 60;  // billboard width
+    const bh = 44;  // billboard height (taller for extra line)
+
+    // Posts (two legs)
+    px(bb.x - 8, bb.y, 2, 12, C.sign);
+    px(bb.x + 6, bb.y, 2, 12, C.sign);
+
+    // Board background
+    px(bb.x - bw / 2, bb.y - bh, bw, bh, '#111a11');
+    // Board border (thicker)
+    px(bb.x - bw / 2, bb.y - bh, bw, 2, '#667744');
+    px(bb.x - bw / 2, bb.y - 2, bw, 2, '#667744');
+    px(bb.x - bw / 2, bb.y - bh, 2, bh, '#667744');
+    px(bb.x + bw / 2 - 2, bb.y - bh, 2, bh, '#667744');
+
+    // Direction + Arrow (top)
+    pxText(bb.arrow + ' ' + bb.direction, bb.x, bb.y - bh + 9, C.arrow, 10);
+    // Label (middle, big)
+    pxText(bb.label, bb.x, bb.y - bh + 22, C.white, 14);
+    // Sublabel (bottom)
+    pxText(bb.sublabel, bb.x, bb.y - bh + 35, '#889988', 10);
 }
 
 function drawCrossroadsSigns() {
@@ -751,9 +807,9 @@ invBackBtn.addEventListener('click', () => {
     invOverlay.classList.add('hidden');
     if (joystickZone && isTouchDevice) joystickZone.style.display = 'block';
 
-    // Reset car position away from destination
+    // Reset car on the approach road, facing forward (up)
     car.x = CROSS_X;
-    car.y = CROSS_Y + 20;
+    car.y = CROSS_Y + 160;
     car.speed = 0;
     car.angle = -Math.PI / 2;
     arrived = null;
