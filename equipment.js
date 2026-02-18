@@ -895,7 +895,7 @@ invBackBtn.addEventListener('click', () => {
 
     // Reset car on the approach road, facing forward (up)
     car.x = CROSS_X;
-    car.y = CROSS_Y + 160;
+    car.y = CROSS_Y + START_Y - 40;
     car.speed = 0;
     car.angle = -Math.PI / 2;
     arrived = null;
