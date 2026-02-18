@@ -179,7 +179,7 @@ canvas {
 #joystick-zone {
     position: fixed;
     bottom: 40px;
-    left: 40px;
+    right: 40px;
     z-index: 5;
     touch-action: none;
 }
