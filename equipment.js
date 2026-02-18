@@ -130,8 +130,21 @@ const truck = {
     startY: rocket.y + 25,
     state: 'parked',   // parked → loading → driving → fading → gone
     stateT: 0,
-    alpha: 1
+    alpha: 1,
+    facing: 'right',
+    waypointIdx: 0
 };
+
+// Access road connecting truck area to main road
+const ACCESS_EAST = Math.round(truck.startX + 56);   // east end of parking segment
+const ACCESS_CONNECT_Y = Math.round(truck.startY - 50); // where it meets main road
+
+const truckWaypoints = [
+    { x: ACCESS_EAST, y: truck.startY },            // drive right to east end
+    { x: ACCESS_EAST, y: ACCESS_CONNECT_Y },         // drive north to corner
+    { x: CROSS_X, y: ACCESS_CONNECT_Y },             // drive left to main road
+    { x: CROSS_X, y: CROSS_Y - 250 }                 // drive north and away
+];
 
 // Lights delivered to each crane (index matches cranes[])
 const craneLights = [
@@ -241,6 +254,27 @@ for (let i = scenery.length - 1; i >= 0; i--) {
     const dy = s.y - truck.y;
     if (Math.abs(dx) < 35 && Math.abs(dy) < 40) {
         scenery.splice(i, 1);
+    }
+}
+
+// Remove trees near access road segments
+for (let i = scenery.length - 1; i >= 0; i--) {
+    const s = scenery[i];
+    const margin = ROAD_W / 2 + 8;
+    // H1: parking segment
+    if (s.x > truck.startX - 20 && s.x < ACCESS_EAST + margin &&
+        Math.abs(s.y - truck.startY) < margin) {
+        scenery.splice(i, 1); continue;
+    }
+    // V1: northbound segment
+    if (Math.abs(s.x - ACCESS_EAST) < margin &&
+        s.y > ACCESS_CONNECT_Y - margin && s.y < truck.startY + margin) {
+        scenery.splice(i, 1); continue;
+    }
+    // H2: westbound connector
+    if (s.x > CROSS_X + margin && s.x < ACCESS_EAST + margin &&
+        Math.abs(s.y - ACCESS_CONNECT_Y) < margin) {
+        scenery.splice(i, 1); continue;
     }
 }
 
@@ -751,23 +785,40 @@ function update() {
         if (truck.stateT > 90) {
             truck.state = 'driving';
             truck.stateT = 0;
+            truck.waypointIdx = 0;
         }
     } else if (truck.state === 'driving') {
-        // Drive toward road then north
-        if (truck.x > CROSS_X + 2) {
-            truck.x -= 0.5;
-            truck.y -= 0.25;
+        // Follow waypoints along access road
+        const wp = truckWaypoints[truck.waypointIdx];
+        const dx = wp.x - truck.x;
+        const dy = wp.y - truck.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const speed = 0.6;
+
+        // Update facing based on movement direction
+        if (Math.abs(dx) > Math.abs(dy)) {
+            truck.facing = dx > 0 ? 'right' : 'left';
         } else {
-            truck.x = CROSS_X;
-            truck.y -= 0.6;
+            truck.facing = dy > 0 ? 'down' : 'up';
         }
-        if (truck.y < CROSS_Y - 180) {
-            truck.state = 'fading';
-            truck.stateT = 0;
+
+        if (dist < speed) {
+            truck.x = wp.x;
+            truck.y = wp.y;
+            truck.waypointIdx++;
+            if (truck.waypointIdx >= truckWaypoints.length) {
+                truck.state = 'fading';
+                truck.stateT = 0;
+                truck.facing = 'up';
+            }
+        } else {
+            truck.x += (dx / dist) * speed;
+            truck.y += (dy / dist) * speed;
         }
     } else if (truck.state === 'fading') {
         truck.stateT++;
         truck.y -= 0.6;
+        truck.facing = 'up';
         truck.alpha = Math.max(0, 1 - truck.stateT / 180); // 3s at 60fps
         if (truck.alpha <= 0) {
             truck.state = 'gone';
@@ -1060,16 +1111,41 @@ function drawRoads() {
     // Horizontal road (left to Lights, right to Grip)
     px(CROSS_X - 200, CROSS_Y - ROAD_W / 2, 400, ROAD_W, C.road);
 
-    // Center line dashes — vertical (extended)
+    // Access road: truck parking → east → north → west → main road
+    const hw = ROAD_W / 2;
+    // H1: parking segment (east-west at truck Y)
+    px(truck.startX - 18, truck.startY - hw, ACCESS_EAST - (truck.startX - 18) + hw, ROAD_W, C.road);
+    // V1: northbound segment (at ACCESS_EAST)
+    px(ACCESS_EAST - hw, ACCESS_CONNECT_Y - hw, ROAD_W, truck.startY - ACCESS_CONNECT_Y + ROAD_W, C.road);
+    // H2: westbound connector (at ACCESS_CONNECT_Y, to main road)
+    px(CROSS_X - hw, ACCESS_CONNECT_Y - hw, ACCESS_EAST - CROSS_X + ROAD_W, ROAD_W, C.road);
+
+    // Center line dashes — main vertical (extended)
     for (let y = CROSS_Y - 200; y < CROSS_Y + START_Y + 50; y += 8) {
-        if (Math.abs(y - CROSS_Y) < ROAD_W / 2) continue;
+        if (Math.abs(y - CROSS_Y) < hw) continue;
+        if (Math.abs(y - ACCESS_CONNECT_Y) < hw) continue; // skip access T-junction
         px(CROSS_X - 0.5, y, 1, 4, C.roadLine);
     }
 
-    // Center line dashes — horizontal
+    // Center line dashes — main horizontal
     for (let x = CROSS_X - 200; x < CROSS_X + 200; x += 8) {
-        if (Math.abs(x - CROSS_X) < ROAD_W / 2) continue;
+        if (Math.abs(x - CROSS_X) < hw) continue;
         px(x, CROSS_Y - 0.5, 4, 1, C.roadLine);
+    }
+
+    // Center line dashes — access H1 (truck parking segment)
+    for (let x = truck.startX - 16; x < ACCESS_EAST - hw; x += 8) {
+        px(x, truck.startY - 0.5, 4, 1, C.roadLine);
+    }
+
+    // Center line dashes — access V1 (northbound)
+    for (let y = ACCESS_CONNECT_Y + hw; y < truck.startY - hw; y += 8) {
+        px(ACCESS_EAST - 0.5, y, 1, 4, C.roadLine);
+    }
+
+    // Center line dashes — access H2 (westbound connector)
+    for (let x = CROSS_X + hw; x < ACCESS_EAST - hw; x += 8) {
+        px(x, ACCESS_CONNECT_Y - 0.5, 4, 1, C.roadLine);
     }
 }
 
@@ -1618,8 +1694,12 @@ function drawTruckScene() {
 
     if (truck.state === 'parked' || truck.state === 'loading') {
         drawTruckParked();
-    } else {
+    } else if (truck.facing === 'left') {
+        drawTruckFacingLeft();
+    } else if (truck.facing === 'up') {
         drawTruckDriving();
+    } else {
+        drawTruckParked(); // facing right
     }
 
     // Draw workers (only while parked or early loading)
@@ -1715,6 +1795,49 @@ function drawTruckDriving() {
     pxText('MOONLIT', tx, ty + 3, '#aaa', 6);
 }
 
+function drawTruckFacingLeft() {
+    const tx = truck.x;
+    const ty = truck.y;
+
+    // Side-view facing left (mirror of parked)
+    // Shadow
+    px(tx - 14, ty + 6, 28, 4, 'rgba(0,0,0,0.15)');
+
+    // Wheels
+    px(tx - 12, ty + 4, 4, 3, '#222');
+    px(tx + 8, ty + 4, 4, 3, '#222');
+    px(tx - 11, ty + 5, 2, 1, '#555');
+    px(tx + 9, ty + 5, 2, 1, '#555');
+
+    // Chassis
+    px(tx - 13, ty + 3, 26, 2, '#444');
+
+    // Cab (now on left side)
+    px(tx - 16, ty - 8, 8, 12, '#ddd');
+    px(tx - 16, ty - 9, 8, 1, '#bbb');
+    px(tx - 15, ty - 7, 3, 4, '#446688');
+    px(tx - 12, ty - 6, 1, 8, '#aaa');
+
+    // Box body (shifted right)
+    px(tx - 8, ty - 12, 20, 16, '#e8e8e8');
+    px(tx - 8, ty - 13, 20, 1, '#ccc');
+    px(tx - 8, ty + 3, 20, 1, '#aaa');
+    px(tx - 8, ty - 4, 1, 7, '#bbb');
+    px(tx + 11, ty - 4, 1, 7, '#bbb');
+
+    // Roll-up door (on right side now)
+    px(tx + 9, ty - 4, 3, 8, '#999');
+    px(tx + 9, ty - 5, 3, 1, '#888');
+
+    // Front bumper (left side)
+    px(tx - 17, ty + 1, 2, 3, '#888');
+    // Headlight & tail light
+    px(tx - 17, ty - 1, 2, 2, '#ffee88');
+    px(tx + 12, ty + 1, 1, 2, '#cc3333');
+
+    pxText('MOONLIT', tx + 2, ty - 5, '#888', 7);
+}
+
 function drawWorkers() {
     const w = workers;
     const walking = w.phase === 1 || w.phase === 3 || w.phase === 5 || w.phase === 7 ||
@@ -1806,25 +1929,36 @@ function drawTruckHeadlights() {
     const baseAlpha = Math.max(0.15, Math.min(0.4, dark * 0.5 + 0.15));
     const alpha = baseAlpha * truck.alpha;
 
+    // Determine rotation from facing
+    let angle;
+    if (truck.facing === 'right') angle = 0;
+    else if (truck.facing === 'left') angle = Math.PI;
+    else if (truck.facing === 'up') angle = -Math.PI / 2;
+    else angle = Math.PI / 2;
+
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(angle);
+
     const coneLen = 55 * s;
     const coneW = 10 * s;
+    const offsets = [-3 * s, 3 * s];
 
-    // Two headlight cones projecting north (up on screen)
-    const offsets = [-4 * s, 4 * s];
     for (const off of offsets) {
-        const grad = ctx.createLinearGradient(0, ty - 10 * s, 0, ty - 10 * s - coneLen);
+        const grad = ctx.createLinearGradient(8 * s, 0, 8 * s + coneLen, 0);
         grad.addColorStop(0, `rgba(255, 238, 120, ${alpha})`);
         grad.addColorStop(0.5, `rgba(255, 238, 120, ${alpha * 0.3})`);
         grad.addColorStop(1, 'rgba(255, 238, 120, 0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.moveTo(tx + off - 1 * s, ty - 10 * s);
-        ctx.lineTo(tx + off + 1 * s, ty - 10 * s);
-        ctx.lineTo(tx + off + coneW, ty - 10 * s - coneLen);
-        ctx.lineTo(tx + off - coneW, ty - 10 * s - coneLen);
+        ctx.moveTo(8 * s, off);
+        ctx.lineTo(8 * s + coneLen, off - coneW);
+        ctx.lineTo(8 * s + coneLen, off + coneW);
         ctx.closePath();
         ctx.fill();
     }
+
+    ctx.restore();
 }
 
 // ── Crane Light Beams (HMIs illuminating rocket at night) ───────────
