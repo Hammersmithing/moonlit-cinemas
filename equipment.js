@@ -153,9 +153,9 @@ for (let x = -250; x <= 250; x += 18 + Math.floor(Math.random() * 12)) {
 
 const BB_OFFSET = ROAD_W / 2 + 34;
 const billboards = [
-    { label: 'GRIP GEAR', sublabel: 'Stands & Rigging', direction: 'Turn Right', arrow: '>', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 100 },
-    { label: 'LIGHTS', sublabel: 'Fixtures & Mods', direction: 'Turn Left', arrow: '<', x: CROSS_X - BB_OFFSET, y: CROSS_Y + 210 },
-    { label: 'EQUIPMENT', sublabel: 'Full Inventory', direction: 'Straight Ahead', arrow: '^', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 320 }
+    { label: 'GRIP GEAR', sublabel: 'Stands & Rigging', direction: 'Turn Right', arrow: '\u2192', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 100 },
+    { label: 'LIGHTS', sublabel: 'Fixtures & Mods', direction: 'Turn Left', arrow: '\u2190', x: CROSS_X - BB_OFFSET, y: CROSS_Y + 210 },
+    { label: 'EQUIPMENT', sublabel: 'Full Inventory', direction: 'Straight Ahead', arrow: '\u2191', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 320 }
 ];
 
 // Remove trees that collide with billboards
@@ -164,7 +164,7 @@ for (let i = scenery.length - 1; i >= 0; i--) {
     for (const bb of billboards) {
         const dx = s.x - bb.x;
         const dy = s.y - bb.y;
-        if (Math.abs(dx) < 40 && Math.abs(dy) < 28) {
+        if (Math.abs(dx) < 55 && Math.abs(dy) < 60) {
             scenery.splice(i, 1);
             break;
         }
@@ -690,12 +690,12 @@ function drawRocket() {
     px(rx + 4, ry, 3, 5, '#cc3333');
 
     // Label
-    pxText('BACK TO SPACE', rx, ry + 16, '#8899aa', 9);
+    pxText('BACK TO SPACE', rx, ry + 13, '#ccddbb', 13);
 }
 
 function drawBillboard(bb) {
     const bw = 62;  // billboard width
-    const bh = 46;  // billboard height
+    const bh = 48;  // billboard height
 
     // Posts (two legs)
     px(bb.x - 8, bb.y, 3, 12, C.sign);
@@ -709,12 +709,64 @@ function drawBillboard(bb) {
     px(bb.x - bw / 2, bb.y - bh, 2, bh, '#667744');
     px(bb.x + bw / 2 - 2, bb.y - bh, 2, bh, '#667744');
 
-    // Direction + Arrow (top)
-    pxText(bb.arrow + ' ' + bb.direction, bb.x, bb.y - bh + 12, C.arrow, 13);
+    // Direction text with inline arrow
+    // Measure text to position arrow next to it
+    ctx.font = 'bold 13px "Courier New", monospace';
+    const dirText = bb.direction;
+    const dirW = ctx.measureText(dirText).width / PIXEL;
+    const lineY = bb.y - bh + 12;
+    const lineCX = (bb.x - cam.x) * PIXEL;
+
+    const ay = (lineY - cam.y) * PIXEL;
+    const as = 4 * PIXEL;
+    ctx.fillStyle = C.arrow;
+    const shaft = as * 0.3; // shaft thickness
+
+    if (bb.arrow === '\u2192') { // right — arrow on right side of text
+        pxText(dirText, bb.x - 4, lineY, C.arrow, 13);
+        const textRight = lineCX + (dirW / 2) * PIXEL;
+        const ax = textRight + 6 * PIXEL;
+        // Shaft
+        ctx.fillRect(ax - as * 1.35, ay - shaft, as * 1.35, shaft * 2);
+        // Triangle head
+        ctx.beginPath();
+        ctx.moveTo(ax + as * 0.75, ay);
+        ctx.lineTo(ax - as * 0.25, ay - as * 0.75);
+        ctx.lineTo(ax - as * 0.25, ay + as * 0.75);
+        ctx.closePath();
+        ctx.fill();
+    } else if (bb.arrow === '\u2190') { // left — arrow on left side of text
+        pxText(dirText, bb.x + 4, lineY, C.arrow, 13);
+        const textLeft = lineCX - (dirW / 2) * PIXEL;
+        const ax = textLeft - 6 * PIXEL;
+        // Shaft
+        ctx.fillRect(ax, ay - shaft, as * 1.35, shaft * 2);
+        // Triangle head
+        ctx.beginPath();
+        ctx.moveTo(ax - as * 0.75, ay);
+        ctx.lineTo(ax + as * 0.25, ay - as * 0.75);
+        ctx.lineTo(ax + as * 0.25, ay + as * 0.75);
+        ctx.closePath();
+        ctx.fill();
+    } else { // up — arrow left of text
+        pxText(dirText, bb.x + 4, lineY, C.arrow, 13);
+        const textLeft = lineCX - (dirW / 2) * PIXEL;
+        const ax = textLeft - 6 * PIXEL;
+        // Shaft
+        ctx.fillRect(ax - shaft, ay, shaft * 2, as * 1.35);
+        // Triangle head
+        ctx.beginPath();
+        ctx.moveTo(ax, ay - as * 0.75);
+        ctx.lineTo(ax - as * 0.75, ay + as * 0.25);
+        ctx.lineTo(ax + as * 0.75, ay + as * 0.25);
+        ctx.closePath();
+        ctx.fill();
+    }
+
     // Label (middle, big)
-    pxText(bb.label, bb.x, bb.y - bh + 28, C.white, 17);
+    pxText(bb.label, bb.x, bb.y - bh + 26, C.white, 17);
     // Sublabel (bottom)
-    pxText(bb.sublabel, bb.x, bb.y - bh + 43, '#ccddbb', 13);
+    pxText(bb.sublabel, bb.x, bb.y - bh + 40, '#ccddbb', 13);
 }
 
 function drawCrossroadsSigns() {
