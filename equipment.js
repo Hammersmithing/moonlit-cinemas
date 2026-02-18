@@ -125,7 +125,12 @@ const cranes = [
 
 const truck = {
     x: rocket.x + 75,
-    y: rocket.y + 25
+    y: rocket.y + 25,
+    startX: rocket.x + 75,
+    startY: rocket.y + 25,
+    state: 'parked',   // parked → loading → driving → fading → gone
+    stateT: 0,
+    alpha: 1
 };
 
 // Lights delivered to each crane (index matches cranes[])
@@ -719,11 +724,53 @@ function update() {
                 w.phase++;
                 if (w.phase > 7) w.done = true;
             }
-        } else {
-            // Done — workers idle at truck
-            w.w1x = truck.x - 10; w.w1y = truck.y + 8;
-            w.w2x = truck.x - 7; w.w2y = truck.y + 13;
+        } else if (truck.state === 'parked') {
+            // Done delivering — trigger truck departure
+            truck.state = 'loading';
+            truck.stateT = 0;
+        }
+
+        // During loading: workers walk to cab then get in
+        if (truck.state === 'loading') {
+            const cabX = truck.x + 10;
+            const cabY = truck.y - 2;
+            const idleX1 = truck.startX - 10, idleY1 = truck.startY + 8;
+            const idleX2 = truck.startX - 7, idleY2 = truck.startY + 13;
+            const lt = Math.min(truck.stateT / 60, 1);
+            w.w1x = idleX1 + (cabX - idleX1) * lt;
+            w.w1y = idleY1 + (cabY - idleY1) * lt;
+            w.w2x = idleX2 + (cabX - idleX2) * lt;
+            w.w2y = idleY2 + (cabY - idleY2) * lt;
             w.carrying = false;
+        }
+    }
+
+    // Truck departure state machine
+    if (truck.state === 'loading') {
+        truck.stateT++;
+        if (truck.stateT > 90) {
+            truck.state = 'driving';
+            truck.stateT = 0;
+        }
+    } else if (truck.state === 'driving') {
+        // Drive toward road then north
+        if (truck.x > CROSS_X + 2) {
+            truck.x -= 0.5;
+            truck.y -= 0.25;
+        } else {
+            truck.x = CROSS_X;
+            truck.y -= 0.6;
+        }
+        if (truck.y < CROSS_Y - 180) {
+            truck.state = 'fading';
+            truck.stateT = 0;
+        }
+    } else if (truck.state === 'fading') {
+        truck.stateT++;
+        truck.y -= 0.6;
+        truck.alpha = Math.max(0, 1 - truck.stateT / 180); // 3s at 60fps
+        if (truck.alpha <= 0) {
+            truck.state = 'gone';
         }
     }
 
@@ -907,9 +954,8 @@ function draw() {
     }
 
     // Draw truck & workers (behind car)
-    if (truck.y < car.y) {
-        drawTruck();
-        drawWorkers();
+    if (truck.state !== 'gone' && truck.y < car.y) {
+        drawTruckScene();
     }
 
     // Draw cranes (behind car)
@@ -956,9 +1002,8 @@ function draw() {
     }
 
     // Draw truck & workers (in front of car)
-    if (truck.y >= car.y) {
-        drawTruck();
-        drawWorkers();
+    if (truck.state !== 'gone' && truck.y >= car.y) {
+        drawTruckScene();
     }
 
     // Draw scenery in front of car
@@ -997,6 +1042,11 @@ function draw() {
     // Crane-mounted HMI illumination (when dark and lights are lifted)
     if (darkness > 0.1) {
         drawCraneLightBeams(darkness);
+    }
+
+    // Truck headlight beams (when driving away)
+    if (truck.state === 'driving' || truck.state === 'fading') {
+        drawTruckHeadlights();
     }
 
     // HUD
@@ -1558,9 +1608,32 @@ function drawSocialBillboard() {
     }
 }
 
-// ── Box Truck Drawing ───────────────────────────────────────────────
+// ── Box Truck & Workers Drawing ─────────────────────────────────────
 
-function drawTruck() {
+function drawTruckScene() {
+    if (truck.state === 'gone') return;
+
+    ctx.save();
+    ctx.globalAlpha = truck.alpha;
+
+    if (truck.state === 'parked' || truck.state === 'loading') {
+        drawTruckParked();
+    } else {
+        drawTruckDriving();
+    }
+
+    // Draw workers (only while parked or early loading)
+    const showWorkers = truck.state === 'parked' ||
+        (truck.state === 'loading' && truck.stateT < 60);
+    if (showWorkers) {
+        drawWorkers();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+}
+
+function drawTruckParked() {
     const tx = truck.x;
     const ty = truck.y;
 
@@ -1570,53 +1643,82 @@ function drawTruck() {
     // Wheels (back and front axle)
     px(tx - 12, ty + 4, 4, 3, '#222');
     px(tx + 8, ty + 4, 4, 3, '#222');
-    // Wheel hubs
     px(tx - 11, ty + 5, 2, 1, '#555');
     px(tx + 9, ty + 5, 2, 1, '#555');
 
-    // Chassis / frame rail
+    // Chassis
     px(tx - 13, ty + 3, 26, 2, '#444');
 
-    // Box body (big white cargo area)
+    // Box body
     px(tx - 12, ty - 12, 20, 16, '#e8e8e8');
-    // Roof edge
     px(tx - 12, ty - 13, 20, 1, '#ccc');
-    // Bottom trim
     px(tx - 12, ty + 3, 20, 1, '#aaa');
-    // Side panels / detail line
     px(tx - 12, ty - 4, 1, 7, '#bbb');
     px(tx + 7, ty - 4, 1, 7, '#bbb');
 
-    // Roll-up door (rear, open — visible from side)
+    // Roll-up door (open)
     px(tx - 12, ty - 4, 3, 8, '#999');
     px(tx - 12, ty - 5, 3, 1, '#888');
 
     // Cab
     px(tx + 8, ty - 8, 8, 12, '#ddd');
-    // Cab roof
     px(tx + 8, ty - 9, 8, 1, '#bbb');
-    // Cab window
     px(tx + 12, ty - 7, 3, 4, '#446688');
-    // Cab door line
     px(tx + 11, ty - 6, 1, 8, '#aaa');
 
     // Front bumper
     px(tx + 15, ty + 1, 2, 3, '#888');
-
-    // Headlight
+    // Headlight & tail light
     px(tx + 15, ty - 1, 2, 2, '#ffee88');
-    // Tail light
     px(tx - 13, ty + 1, 1, 2, '#cc3333');
 
-    // "MOONLIT" text on box body
     pxText('MOONLIT', tx - 2, ty - 5, '#888', 7);
 }
 
-// ── Workers Drawing ─────────────────────────────────────────────────
+function drawTruckDriving() {
+    const tx = truck.x;
+    const ty = truck.y;
+
+    // Top-down north-facing box truck
+    // Shadow
+    px(tx - 5, ty + 9, 10, 3, 'rgba(0,0,0,0.15)');
+
+    // Rear wheels
+    px(tx - 7, ty + 5, 3, 4, '#222');
+    px(tx + 4, ty + 5, 3, 4, '#222');
+    // Front wheels
+    px(tx - 7, ty - 7, 3, 3, '#222');
+    px(tx + 4, ty - 7, 3, 3, '#222');
+
+    // Box body
+    px(tx - 5, ty - 3, 10, 13, '#e8e8e8');
+    // Side rails
+    px(tx - 5, ty - 3, 1, 13, '#ccc');
+    px(tx + 4, ty - 3, 1, 13, '#ccc');
+
+    // Roll-up door (closed, rear)
+    px(tx - 4, ty + 8, 8, 2, '#aaa');
+
+    // Cab
+    px(tx - 5, ty - 10, 10, 8, '#ddd');
+    px(tx - 5, ty - 10, 10, 1, '#bbb');
+    // Windshield
+    px(tx - 4, ty - 10, 8, 3, '#446688');
+
+    // Headlights (glowing)
+    px(tx - 5, ty - 11, 2, 1, '#ffee88');
+    px(tx + 3, ty - 11, 2, 1, '#ffee88');
+    // Tail lights
+    px(tx - 4, ty + 10, 2, 1, '#cc3333');
+    px(tx + 2, ty + 10, 2, 1, '#cc3333');
+
+    pxText('MOONLIT', tx, ty + 3, '#aaa', 6);
+}
 
 function drawWorkers() {
     const w = workers;
-    const walking = w.phase === 1 || w.phase === 3 || w.phase === 5 || w.phase === 7;
+    const walking = w.phase === 1 || w.phase === 3 || w.phase === 5 || w.phase === 7 ||
+        truck.state === 'loading';
 
     // Draw carried HMI between workers
     if (w.carrying) {
@@ -1625,10 +1727,7 @@ function drawWorkers() {
         drawHMI(midX, midY, true);
     }
 
-    // Worker 1 (front)
     drawWorkerFigure(w.w1x, w.w1y, walking);
-
-    // Worker 2 (behind, slightly offset)
     drawWorkerFigure(w.w2x, w.w2y, walking);
 }
 
@@ -1694,6 +1793,38 @@ function drawWorkerFigure(x, y, walking) {
     // Arms
     px(x - 2, y - 2, 1, 3, '#ddb88c');
     px(x + 2, y - 2, 1, 3, '#ddb88c');
+}
+
+// ── Truck Headlight Beams ────────────────────────────────────────────
+
+function drawTruckHeadlights() {
+    if (truck.state === 'gone') return;
+    const tx = (truck.x - cam.x) * PIXEL;
+    const ty = (truck.y - cam.y) * PIXEL;
+    const s = PIXEL;
+    const dark = getDarkness();
+    const baseAlpha = Math.max(0.15, Math.min(0.4, dark * 0.5 + 0.15));
+    const alpha = baseAlpha * truck.alpha;
+
+    const coneLen = 55 * s;
+    const coneW = 10 * s;
+
+    // Two headlight cones projecting north (up on screen)
+    const offsets = [-4 * s, 4 * s];
+    for (const off of offsets) {
+        const grad = ctx.createLinearGradient(0, ty - 10 * s, 0, ty - 10 * s - coneLen);
+        grad.addColorStop(0, `rgba(255, 238, 120, ${alpha})`);
+        grad.addColorStop(0.5, `rgba(255, 238, 120, ${alpha * 0.3})`);
+        grad.addColorStop(1, 'rgba(255, 238, 120, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(tx + off - 1 * s, ty - 10 * s);
+        ctx.lineTo(tx + off + 1 * s, ty - 10 * s);
+        ctx.lineTo(tx + off + coneW, ty - 10 * s - coneLen);
+        ctx.lineTo(tx + off - coneW, ty - 10 * s - coneLen);
+        ctx.closePath();
+        ctx.fill();
+    }
 }
 
 // ── Crane Light Beams (HMIs illuminating rocket at night) ───────────
