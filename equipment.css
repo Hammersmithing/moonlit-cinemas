@@ -30,6 +30,7 @@ canvas {
     padding-top: 80px;
     animation: fadeIn 0.3s ease;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .overlay.hidden {

@@ -10,8 +10,12 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// Prevent scroll/bounce on mobile
-document.body.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+// Prevent scroll/bounce on mobile (allow scroll on overlays)
+document.body.addEventListener('touchmove', e => {
+    if (!document.querySelector('.section-overlay:not(.hidden)')) {
+        e.preventDefault();
+    }
+}, { passive: false });
 
 // ── State ───────────────────────────────────────────────────────────
 

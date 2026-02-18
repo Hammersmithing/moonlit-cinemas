@@ -18,8 +18,12 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// Prevent mobile scroll
-document.body.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+// Prevent mobile scroll (only when game is active, not on overlays)
+document.body.addEventListener('touchmove', e => {
+    if (!document.querySelector('.overlay:not(.hidden)')) {
+        e.preventDefault();
+    }
+}, { passive: false });
 
 // ── Input ───────────────────────────────────────────────────────────
 
