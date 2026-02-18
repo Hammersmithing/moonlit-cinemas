@@ -12,13 +12,16 @@
         <div class="controls-box">
             <h1>MOONLIT CINEMAS</h1>
             <p class="subtitle">Gaffing Services for Film</p>
-            <div class="controls-instructions">
+            <div class="controls-instructions desktop-only">
                 <div class="key-group">
                     <span class="key">W</span> or <span class="key">&uarr;</span> Thrust
                 </div>
                 <div class="key-group">
                     <span class="key">A</span> <span class="key">D</span> or <span class="key">&larr;</span> <span class="key">&rarr;</span> Rotate
                 </div>
+            </div>
+            <div class="controls-instructions mobile-only">
+                <div class="key-group">Drag the joystick to fly</div>
             </div>
             <p class="hint">Fly into an asteroid to explore</p>
             <button id="start-btn">LAUNCH</button>
@@ -32,6 +35,14 @@
     </div>
 
     <canvas id="game"></canvas>
+
+    <!-- Virtual joystick (touch devices) -->
+    <div id="joystick-zone" class="mobile-only">
+        <div id="joystick-base">
+            <div id="joystick-knob"></div>
+        </div>
+    </div>
+
     <script src="game.js"></script>
 </body>
 </html>

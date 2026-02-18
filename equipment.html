@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equipment — Moonlit Cinemas</title>
+    <link rel="stylesheet" href="equipment.css">
+</head>
+<body>
+    <canvas id="game"></canvas>
+
+    <!-- Inventory overlay -->
+    <div id="inventory-overlay" class="overlay hidden">
+        <button class="back-btn" id="inv-back-btn">&#8592; Back to road</button>
+        <div class="inventory-content" id="inventory-content"></div>
+    </div>
+
+    <!-- Virtual joystick (touch devices) -->
+    <div id="joystick-zone" class="mobile-only">
+        <div id="joystick-base">
+            <div id="joystick-knob"></div>
+        </div>
+    </div>
+
+    <script src="equipment.js"></script>
+</body>
+</html>

@@ -10,6 +10,9 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
+// Prevent scroll/bounce on mobile
+document.body.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
 // ── State ───────────────────────────────────────────────────────────
 
 let running = false;
@@ -17,6 +20,71 @@ const keys = {};
 
 window.addEventListener('keydown', e => { keys[e.key] = true; });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// ── Touch / Joystick ────────────────────────────────────────────────
+
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+const joystick = {
+    active: false,
+    dx: 0,       // -1 to 1 horizontal offset
+    dy: 0,       // -1 to 1 vertical offset
+    magnitude: 0 // 0 to 1 how far from center
+};
+
+if (isTouchDevice) {
+    const base = document.getElementById('joystick-base');
+    const knob = document.getElementById('joystick-knob');
+    const maxDist = 38; // max pixel offset for knob
+
+    function handleJoystickMove(clientX, clientY) {
+        const rect = base.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        let dx = clientX - cx;
+        let dy = clientY - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const clamped = Math.min(dist, maxDist);
+        if (dist > 0) {
+            dx = (dx / dist) * clamped;
+            dy = (dy / dist) * clamped;
+        }
+        knob.style.transform = `translate(${dx}px, ${dy}px)`;
+        joystick.dx = dx / maxDist;
+        joystick.dy = dy / maxDist;
+        joystick.magnitude = clamped / maxDist;
+        joystick.active = true;
+    }
+
+    function resetJoystick() {
+        knob.style.transform = 'translate(0, 0)';
+        joystick.dx = 0;
+        joystick.dy = 0;
+        joystick.magnitude = 0;
+        joystick.active = false;
+    }
+
+    base.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const t = e.touches[0];
+        handleJoystickMove(t.clientX, t.clientY);
+    }, { passive: false });
+
+    base.addEventListener('touchmove', e => {
+        e.preventDefault();
+        const t = e.touches[0];
+        handleJoystickMove(t.clientX, t.clientY);
+    }, { passive: false });
+
+    base.addEventListener('touchend', e => {
+        e.preventDefault();
+        resetJoystick();
+    }, { passive: false });
+
+    base.addEventListener('touchcancel', e => {
+        resetJoystick();
+    });
+}
 
 // ── Stars (background) ─────────────────────────────────────────────
 
@@ -146,9 +214,22 @@ function update() {
 
     // Thrust
     ship.thrust = (keys['w'] || keys['W'] || keys['ArrowUp']) ? 1 : 0;
+
+    // Joystick input — point ship toward joystick direction and thrust proportionally
+    if (joystick.active && joystick.magnitude > 0.15) {
+        const targetAngle = Math.atan2(joystick.dy, joystick.dx);
+        // Smooth rotation toward target angle
+        let diff = targetAngle - ship.angle;
+        // Normalize to -PI..PI
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        ship.angle += diff * 0.12;
+        ship.thrust = joystick.magnitude;
+    }
+
     if (ship.thrust) {
-        ship.vx += Math.cos(ship.angle) * ship.accel;
-        ship.vy += Math.sin(ship.angle) * ship.accel;
+        ship.vx += Math.cos(ship.angle) * ship.accel * ship.thrust;
+        ship.vy += Math.sin(ship.angle) * ship.accel * ship.thrust;
         if (Math.random() > 0.3) spawnThrustParticle();
     }
 
@@ -362,14 +443,23 @@ const sectionOverlay = document.getElementById('section-overlay');
 const sectionContentEl = document.getElementById('section-content');
 const backBtn = document.getElementById('back-btn');
 
+const joystickZone = document.getElementById('joystick-zone');
+
 function openSection(label) {
+    // Equipment opens its own game page
+    if (label === 'Equipment') {
+        window.location.href = 'equipment.html';
+        return;
+    }
     running = false;
     sectionContentEl.innerHTML = sectionContent[label] || `<h2>${label}</h2><p>Coming soon.</p>`;
     sectionOverlay.classList.remove('hidden');
+    if (joystickZone) joystickZone.style.display = 'none';
 }
 
 backBtn.addEventListener('click', () => {
     sectionOverlay.classList.add('hidden');
+    if (joystickZone && isTouchDevice) joystickZone.style.display = 'block';
     running = true;
     loop();
 });

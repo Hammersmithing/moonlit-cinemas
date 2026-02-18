@@ -175,6 +175,71 @@ canvas {
     color: #556;
 }
 
+/* Virtual Joystick */
+#joystick-zone {
+    position: fixed;
+    bottom: 40px;
+    left: 40px;
+    z-index: 5;
+    touch-action: none;
+}
+
+#joystick-base {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+}
+
+#joystick-knob {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    transition: transform 0.05s;
+    touch-action: none;
+}
+
+/* Mobile / Desktop visibility */
+.mobile-only { display: none; }
+.desktop-only { display: block; }
+
+@media (pointer: coarse) {
+    .mobile-only { display: block; }
+    .desktop-only { display: none; }
+}
+
+@media (hover: none) {
+    .mobile-only { display: block; }
+    .desktop-only { display: none; }
+}
+
+/* Mobile title sizing */
+@media (max-width: 500px) {
+    .controls-box h1 {
+        font-size: 1.5rem;
+        letter-spacing: 0.2em;
+    }
+    .controls-box .subtitle {
+        font-size: 0.8rem;
+    }
+    .controls-box {
+        padding: 24px;
+    }
+    .section-content {
+        padding: 24px;
+    }
+    .section-content h2 {
+        font-size: 1.4rem;
+    }
+}
+
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
