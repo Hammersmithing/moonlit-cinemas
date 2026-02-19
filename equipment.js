@@ -175,7 +175,7 @@ const workers = {
 
 const car = {
     x: CROSS_X,
-    y: CROSS_Y + START_Y,
+    y: ACCESS_CONNECT_Y - 10,
     angle: -Math.PI / 2, // facing up
     speed: 0,
     maxSpeed: 1.2,

@@ -214,8 +214,8 @@ let flashAlpha = 0;
 
 function update() {
     // Rotation
-    if (keys['ArrowLeft']) ship.angle -= ship.rotSpeed;
-    if (keys['ArrowRight']) ship.angle += ship.rotSpeed;
+    if (keys['ArrowLeft']) ship.angle -= ship.rotSpeed * dt;
+    if (keys['ArrowRight']) ship.angle += ship.rotSpeed * dt;
 
     // Thrust
     ship.thrust = keys['ArrowUp'] ? 1 : 0;
@@ -228,19 +228,20 @@ function update() {
         // Normalize to -PI..PI
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
-        ship.angle += diff * 0.12;
+        ship.angle += diff * 0.12 * dt;
         ship.thrust = joystick.magnitude;
     }
 
     if (ship.thrust) {
-        ship.vx += Math.cos(ship.angle) * ship.accel * ship.thrust;
-        ship.vy += Math.sin(ship.angle) * ship.accel * ship.thrust;
+        ship.vx += Math.cos(ship.angle) * ship.accel * ship.thrust * dt;
+        ship.vy += Math.sin(ship.angle) * ship.accel * ship.thrust * dt;
         if (Math.random() > 0.3) spawnThrustParticle();
     }
 
-    // Friction
-    ship.vx *= ship.friction;
-    ship.vy *= ship.friction;
+    // Friction (apply per-frame: friction^dt)
+    const f = Math.pow(ship.friction, dt);
+    ship.vx *= f;
+    ship.vy *= f;
 
     // Speed cap
     const speed = Math.sqrt(ship.vx * ship.vx + ship.vy * ship.vy);
@@ -249,27 +250,27 @@ function update() {
         ship.vy = (ship.vy / speed) * ship.maxSpeed;
     }
 
-    ship.x += ship.vx;
-    ship.y += ship.vy;
+    ship.x += ship.vx * dt;
+    ship.y += ship.vy * dt;
 
     // Update asteroids
     for (const a of asteroids) {
-        a.x += a.vx;
-        a.y += a.vy;
-        a.angle += a.rotSpeed;
+        a.x += a.vx * dt;
+        a.y += a.vy * dt;
+        a.angle += a.rotSpeed * dt;
     }
 
     // Update particles
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= p.decay;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= p.decay * dt;
         if (p.life <= 0) particles.splice(i, 1);
     }
 
     // Flash decay
-    if (flashAlpha > 0) flashAlpha -= 0.03;
+    if (flashAlpha > 0) flashAlpha -= 0.03 * dt;
 
     // Camera follows ship
     camera.x = ship.x - canvas.width / 2;
@@ -395,7 +396,7 @@ function draw() {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         ctx.fillText('LAND ON AN ASTEROID TO EXPLORE', canvas.width / 2, canvas.height / 2 - 40);
-        hintAlpha -= 0.0015;
+        hintAlpha -= 0.0015 * dt;
     }
 }
 
@@ -465,14 +466,10 @@ const backBtn = document.getElementById('back-btn');
 const joystickZone = document.getElementById('joystick-zone');
 
 function openSection(label) {
-    // Equipment opens its own game page
-    if (label === 'Equipment') {
-        window.location.href = 'equipment.html';
-        return;
-    }
-    // Reel opens the living room game
-    if (label === 'Reel') {
-        window.location.href = 'reel.html';
+    // Pages that open their own game — navigate directly
+    if (label === 'Equipment' || label === 'Reel') {
+        running = false;
+        window.location.href = label === 'Equipment' ? 'equipment.html' : 'reel.html';
         return;
     }
     running = false;
@@ -518,8 +515,17 @@ if (window.location.hash === '#hire') {
 
 // ── Game Loop ───────────────────────────────────────────────────────
 
-function loop() {
+let lastTime = 0;
+let dt = 1; // delta-time multiplier (1.0 = 60fps baseline)
+
+function loop(timestamp) {
     if (!running) return;
+    if (lastTime) {
+        const elapsed = timestamp - lastTime;
+        dt = elapsed / (1000 / 60); // normalize to 60fps
+        if (dt > 3) dt = 3; // cap to prevent huge jumps
+    }
+    lastTime = timestamp;
     update();
     draw();
     requestAnimationFrame(loop);
