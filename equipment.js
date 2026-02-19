@@ -1318,7 +1318,7 @@ function drawRocket() {
     px(rx + 4, ry, 3, 5, '#cc3333');
 
     // Label
-    pxText('BACK TO SPACE', rx, ry + 13, '#ccddbb', 13);
+    pxText('BACK TO SPACE', rx, ry + 13, '#ffffff', 13);
 }
 
 function drawCrane(idx) {
