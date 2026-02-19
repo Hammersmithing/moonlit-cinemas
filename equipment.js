@@ -286,6 +286,28 @@ for (let i = scenery.length - 1; i >= 0; i--) {
     }
 }
 
+// Street lamps at each corner of the intersection
+const LAMP_OFF = ROAD_W / 2 + 4; // offset from road center to lamp pole
+const streetLamps = [
+    { x: CROSS_X - LAMP_OFF, y: CROSS_Y - LAMP_OFF }, // NW
+    { x: CROSS_X + LAMP_OFF, y: CROSS_Y - LAMP_OFF }, // NE
+    { x: CROSS_X - LAMP_OFF, y: CROSS_Y + LAMP_OFF }, // SW
+    { x: CROSS_X + LAMP_OFF, y: CROSS_Y + LAMP_OFF }, // SE
+];
+
+// Work light poles at corners of dirt area around rocket
+const dirtCX = rocket.x;
+const dirtCY = rocket.y + 5;
+const dirtW = 140;
+const dirtH = 60;
+// Inset from edges: top row below access road, east side clear of truck parking road (x<57)
+const workLights = [
+    { x: dirtCX - dirtW / 2 + 5,  y: dirtCY - dirtH / 2 + 18 }, // NW
+    { x: dirtCX + dirtW / 2 - 22, y: dirtCY - dirtH / 2 + 18 }, // NE (inset from access road)
+    { x: dirtCX - dirtW / 2 + 5,  y: dirtCY + dirtH / 2 - 5 },  // SW
+    { x: dirtCX + dirtW / 2 - 22, y: dirtCY + dirtH / 2 - 5 },  // SE (inset from truck road)
+];
+
 // Destination buildings
 const destinations = [
     { label: 'EQUIPMENT', x: CROSS_X, y: CROSS_Y - ZONE_DIST - 20, dir: 'straight' },
@@ -1016,10 +1038,6 @@ function draw() {
     }
 
     // Dirt work site around rocket and cranes
-    const dirtCX = rocket.x;
-    const dirtCY = rocket.y + 5;
-    const dirtW = 140; // wide enough for both cranes
-    const dirtH = 60;  // tall enough for rocket + pad area
     px(dirtCX - dirtW / 2, dirtCY - dirtH / 2, dirtW, dirtH, C.dirt);
     // Subtle variation patches on the dirt
     for (let dx = dirtCX - dirtW / 2; dx < dirtCX + dirtW / 2; dx += 12) {
@@ -1065,8 +1083,14 @@ function draw() {
     // Draw social billboard (behind car if above)
     if (socialBillboard.y < car.y) drawSocialBillboard();
 
-    // Draw crossroads signs
-    drawCrossroadsSigns();
+    // Draw street lamps (y-sorted with car)
+    for (const lamp of streetLamps) {
+        if (lamp.y < car.y) drawStreetLamp(lamp.x, lamp.y);
+    }
+    // Draw work lights at dirt area corners
+    for (const wl of workLights) {
+        if (wl.y < car.y) drawWorkLight(wl);
+    }
 
     // Draw car
     drawCar();
@@ -1090,6 +1114,15 @@ function draw() {
     // Draw truck & workers (in front of car)
     if (truck.state !== 'gone' && truck.y >= car.y) {
         drawTruckScene();
+    }
+
+    // Draw street lamps in front of car
+    for (const lamp of streetLamps) {
+        if (lamp.y >= car.y) drawStreetLamp(lamp.x, lamp.y);
+    }
+    // Draw work lights in front of car
+    for (const wl of workLights) {
+        if (wl.y >= car.y) drawWorkLight(wl);
     }
 
     // Draw scenery in front of car
@@ -1181,6 +1214,81 @@ function drawBuilding(x, y, label) {
     px(x - 2, y + 2, 5, 6, C.buildingDoor);
     // Label
     pxText(label, x, y - 5, C.white, 9);
+}
+
+function drawStreetLamp(x, y) {
+    const dark = getDarkness();
+    // Pole
+    px(x, y + 2, 1, 1, '#555');
+    px(x, y, 1, 2, '#666');
+    px(x, y - 4, 1, 4, '#777');
+    px(x, y - 8, 1, 4, '#888');
+    // Arm (extends toward intersection center)
+    const armDirX = x < CROSS_X ? 1 : -1;
+    px(x, y - 9, 1, 1, '#888');
+    px(x + armDirX, y - 9, 1, 1, '#888');
+    px(x + armDirX * 2, y - 9, 1, 1, '#777');
+    // Lamp fixture
+    px(x + armDirX * 2, y - 8, 1, 1, dark > 0.1 ? '#ffeeaa' : '#ddd');
+    // Glow dot when dark
+    if (dark > 0.1) {
+        px(x + armDirX * 2 - 1, y - 9, 3, 2, `rgba(255,238,170,${Math.min(0.5, dark)})`);
+    }
+}
+
+function drawWorkLight(wl) {
+    const x = wl.x;
+    const y = wl.y;
+    const dark = getDarkness();
+    const towardX = dirtCX - x;
+    const armDx = towardX > 0 ? 1 : -1;
+
+    // Tall pole
+    px(x, y + 2, 1, 1, '#444');
+    px(x, y - 2, 1, 4, '#555');
+    px(x, y - 6, 1, 4, '#666');
+    px(x, y - 10, 1, 4, '#777');
+    px(x, y - 14, 1, 4, '#888');
+    px(x, y - 16, 1, 2, '#888');
+
+    // Cross-arm at top angled toward center
+    px(x + armDx, y - 17, 1, 1, '#888');
+    px(x + armDx * 2, y - 17, 1, 1, '#777');
+
+    // Fixture head — sodium vapor deep amber
+    px(x + armDx * 2 - 1, y - 16, 3, 1, dark > 0.1 ? '#ff8800' : '#ccc');
+
+    // Glow when dark
+    if (dark > 0.1) {
+        px(x + armDx * 2 - 1, y - 15, 3, 1, `rgba(255,136,0,${Math.min(0.7, dark)})`);
+    }
+}
+
+function drawWorkLightBeams(darkness) {
+    if (darkness <= 0.1) return;
+    const alpha = Math.min(0.35, darkness * 0.45);
+    const s = PIXEL;
+    for (const wl of workLights) {
+        const towardX = dirtCX - wl.x;
+        const armDx = towardX > 0 ? 1 : -1;
+        const fx = (wl.x + armDx * 2 - cam.x) * s;
+        const fy = (wl.y - 16 - cam.y) * s;
+        // Tight downward cone — sodium vapor deep amber
+        const coneLen = 18 * s;
+        const coneW = 4 * s; // narrow spread
+        const grad = ctx.createLinearGradient(fx, fy, fx, fy + coneLen);
+        grad.addColorStop(0, `rgba(255, 136, 0, ${alpha})`);
+        grad.addColorStop(0.4, `rgba(255, 136, 0, ${alpha * 0.3})`);
+        grad.addColorStop(1, 'rgba(255, 136, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(fx - 1 * s, fy);
+        ctx.lineTo(fx + 1 * s, fy);
+        ctx.lineTo(fx + coneW, fy + coneLen);
+        ctx.lineTo(fx - coneW, fy + coneLen);
+        ctx.closePath();
+        ctx.fill();
+    }
 }
 
 function drawRocket() {
@@ -1418,28 +1526,6 @@ function drawBillboard(bb, flash) {
     pxText(bb.label, bb.x, bb.y - bh + 26, C.white, 17);
     // Sublabel (bottom)
     pxText(bb.sublabel, bb.x, bb.y - bh + 40, '#ccddbb', 13);
-}
-
-function drawCrossroadsSigns() {
-    const signY = CROSS_Y - ROAD_W / 2 - 6;
-
-    // Left sign
-    px(CROSS_X - 18, signY - 6, 14, 8, C.signBoard);
-    pxText('LIGHTS', CROSS_X - 11, signY - 2, C.signText, 7);
-    // Arrow left
-    pxText('<', CROSS_X - 20, signY - 2, C.arrow, 9);
-
-    // Straight sign
-    px(CROSS_X - 5, signY - 14, 11, 8, C.signBoard);
-    pxText('EQUIP', CROSS_X, signY - 10, C.signText, 7);
-    // Arrow up
-    pxText('^', CROSS_X, signY - 17, C.arrow, 9);
-
-    // Right sign
-    px(CROSS_X + 5, signY - 6, 14, 8, C.signBoard);
-    pxText('GRIP', CROSS_X + 12, signY - 2, C.signText, 7);
-    // Arrow right
-    pxText('>', CROSS_X + 21, signY - 2, C.arrow, 9);
 }
 
 function drawCar() {
@@ -1928,18 +2014,26 @@ function drawTruckHeadlights() {
 
     const coneLen = 55 * s;
     const coneW = 10 * s;
-    const offsets = [-3 * s, 3 * s];
+    // Match beam origin to actual headlight bulb positions per facing
+    let fwd, offsets;
+    if (truck.facing === 'up') {
+        fwd = 11 * s;   // top-down: headlights at ty - 11
+        offsets = [-4 * s, 4 * s]; // two headlights at tx ± 4
+    } else {
+        fwd = 16 * s;   // side view: headlight at ±16 from center
+        offsets = [-1 * s, 1 * s]; // single headlight, small spread
+    }
 
     for (const off of offsets) {
-        const grad = ctx.createLinearGradient(8 * s, 0, 8 * s + coneLen, 0);
+        const grad = ctx.createLinearGradient(fwd, 0, fwd + coneLen, 0);
         grad.addColorStop(0, `rgba(255, 238, 120, ${alpha})`);
         grad.addColorStop(0.5, `rgba(255, 238, 120, ${alpha * 0.3})`);
         grad.addColorStop(1, 'rgba(255, 238, 120, 0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.moveTo(8 * s, off);
-        ctx.lineTo(8 * s + coneLen, off - coneW);
-        ctx.lineTo(8 * s + coneLen, off + coneW);
+        ctx.moveTo(fwd, off);
+        ctx.lineTo(fwd + coneLen, off - coneW);
+        ctx.lineTo(fwd + coneLen, off + coneW);
         ctx.closePath();
         ctx.fill();
     }
@@ -2278,22 +2372,67 @@ function drawDarknessWithLights() {
         darkCtx.rotate(angle);
         const coneLen = 55 * s;
         const coneW = 10 * s;
-        const offsets = [-3 * s, 3 * s];
+        let fwd, offsets;
+        if (truck.facing === 'up') {
+            fwd = 11 * s;
+            offsets = [-4 * s, 4 * s];
+        } else {
+            fwd = 16 * s;
+            offsets = [-1 * s, 1 * s];
+        }
         for (const off of offsets) {
-            const grad = darkCtx.createLinearGradient(8 * s, 0, 8 * s + coneLen, 0);
+            const grad = darkCtx.createLinearGradient(fwd, 0, fwd + coneLen, 0);
             grad.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.9})`);
             grad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.5})`);
             grad.addColorStop(0.7, `rgba(255,255,255,${cutAlpha * 0.15})`);
             grad.addColorStop(1, 'rgba(255,255,255,0)');
             darkCtx.fillStyle = grad;
             darkCtx.beginPath();
-            darkCtx.moveTo(8 * s, off);
-            darkCtx.lineTo(8 * s + coneLen, off - coneW);
-            darkCtx.lineTo(8 * s + coneLen, off + coneW);
+            darkCtx.moveTo(fwd, off);
+            darkCtx.lineTo(fwd + coneLen, off - coneW);
+            darkCtx.lineTo(fwd + coneLen, off + coneW);
             darkCtx.closePath();
             darkCtx.fill();
         }
         darkCtx.restore();
+    }
+
+    // --- Work light poles (bright downward pools at dirt area) ---
+    for (const wl of workLights) {
+        const towardX = dirtCX - wl.x;
+        const towardY = dirtCY - wl.y;
+        const armDx = towardX > 0 ? 1 : -1;
+        // Light center is below the fixture, biased toward dirt center
+        const lx = (wl.x + armDx * 2 - cam.x) * PIXEL;
+        const ly = (wl.y - 16 - cam.y) * PIXEL;
+        const poolY = ly + 20 * PIXEL; // pool lands on the ground
+        const radius = 22 * PIXEL;
+        const grad = darkCtx.createRadialGradient(lx, poolY, 0, lx, poolY, radius);
+        grad.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.9})`);
+        grad.addColorStop(0.2, `rgba(255,255,255,${cutAlpha * 0.6})`);
+        grad.addColorStop(0.5, `rgba(255,255,255,${cutAlpha * 0.2})`);
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        darkCtx.fillStyle = grad;
+        darkCtx.beginPath();
+        darkCtx.arc(lx, poolY, radius, 0, Math.PI * 2);
+        darkCtx.fill();
+    }
+
+    // --- Street lamps (warm downward pools at intersection) ---
+    for (const lamp of streetLamps) {
+        const armDirX = lamp.x < CROSS_X ? 1 : -1;
+        const lx = (lamp.x + armDirX * 2 - cam.x) * PIXEL;
+        const ly = (lamp.y - 8 - cam.y) * PIXEL;
+        const radius = 18 * PIXEL;
+        const grad = darkCtx.createRadialGradient(lx, ly, 0, lx, ly + 4 * PIXEL, radius);
+        grad.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.8})`);
+        grad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.4})`);
+        grad.addColorStop(0.7, `rgba(255,255,255,${cutAlpha * 0.1})`);
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        darkCtx.fillStyle = grad;
+        darkCtx.beginPath();
+        darkCtx.arc(lx, ly + 4 * PIXEL, radius, 0, Math.PI * 2);
+        darkCtx.fill();
     }
 
     // --- Worker headlamps (small directional cones, cool white 6500K) ---
@@ -2353,6 +2492,39 @@ function drawDarknessWithLights() {
         drawCraneLightBeams(darkness);
         if (truck.state === 'driving' || truck.state === 'fading') {
             drawTruckHeadlights();
+        }
+        // Work light sodium vapor glow + beams
+        drawWorkLightBeams(darkness);
+        for (const wl of workLights) {
+            const towardX = dirtCX - wl.x;
+            const armDx = towardX > 0 ? 1 : -1;
+            const lx = (wl.x + armDx * 2 - cam.x) * PIXEL;
+            const ly = (wl.y - 16 - cam.y) * PIXEL;
+            const poolY = ly + 20 * PIXEL;
+            const radius = 18 * PIXEL;
+            const grad = ctx.createRadialGradient(lx, poolY, 0, lx, poolY, radius);
+            grad.addColorStop(0, `rgba(255, 136, 0, ${darkness * 0.25})`);
+            grad.addColorStop(0.5, `rgba(255, 136, 0, ${darkness * 0.08})`);
+            grad.addColorStop(1, 'rgba(255, 136, 0, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(lx, poolY, radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Street lamp warm glow
+        for (const lamp of streetLamps) {
+            const armDirX = lamp.x < CROSS_X ? 1 : -1;
+            const lx = (lamp.x + armDirX * 2 - cam.x) * PIXEL;
+            const ly = (lamp.y - 8 - cam.y) * PIXEL;
+            const radius = 14 * PIXEL;
+            const grad = ctx.createRadialGradient(lx, ly + 3 * PIXEL, 0, lx, ly + 3 * PIXEL, radius);
+            grad.addColorStop(0, `rgba(255, 220, 130, ${darkness * 0.25})`);
+            grad.addColorStop(0.5, `rgba(255, 220, 130, ${darkness * 0.08})`);
+            grad.addColorStop(1, 'rgba(255, 220, 130, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(lx, ly + 3 * PIXEL, radius, 0, Math.PI * 2);
+            ctx.fill();
         }
         ctx.restore();
     }
