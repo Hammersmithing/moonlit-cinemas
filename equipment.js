@@ -171,6 +171,24 @@ const workers = {
     dirX: -1, dirY: 0  // facing direction (normalized), default: facing left toward cranes
 };
 
+// ── Police Car NPC ──────────────────────────────────────────────────
+
+const policeCar = {
+    x: CROSS_X, y: CROSS_Y - 220,
+    state: 'waiting', // waiting → driving → parked
+    stateT: 0,
+    facing: 'down',
+    waypointIdx: 0
+};
+
+const policeWaypoints = [
+    { x: CROSS_X, y: CROSS_Y },
+    { x: CROSS_X, y: ACCESS_CONNECT_Y },
+    { x: ACCESS_EAST, y: ACCESS_CONNECT_Y },
+    { x: ACCESS_EAST, y: truck.startY },
+    { x: truck.startX, y: truck.startY }
+];
+
 // ── Car ─────────────────────────────────────────────────────────────
 
 const car = {
@@ -632,7 +650,7 @@ for (let i = scenery.length - 1; i >= 0; i--) {
 
 // ── Update ──────────────────────────────────────────────────────────
 
-function update() {
+function update(dt) {
     const up = keys['w'] || keys['W'] || keys['ArrowUp'];
     const down = keys['s'] || keys['S'] || keys['ArrowDown'];
     const left = keys['a'] || keys['A'] || keys['ArrowLeft'];
@@ -653,7 +671,7 @@ function update() {
 
     // Turning
     if (inputX !== 0 && Math.abs(car.speed) > 0.1) {
-        car.angle += car.turnSpeed * (inputX > 0 ? 1 : -1) * Math.sign(car.speed);
+        car.angle += car.turnSpeed * (inputX > 0 ? 1 : -1) * Math.sign(car.speed) * dt;
     }
 
     // Joystick angle steering (when moving)
@@ -662,26 +680,26 @@ function update() {
         let diff = targetAngle - car.angle;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
-        car.angle += diff * 0.08;
+        car.angle += diff * 0.08 * dt;
     }
 
     // Acceleration
     if (inputThrust) {
-        car.speed += car.accel;
+        car.speed += car.accel * dt;
     } else if (inputY > 0 && !joystick.active) {
-        car.speed -= car.brake;
+        car.speed -= car.brake * dt;
     }
 
-    car.speed *= car.friction;
+    car.speed *= Math.pow(car.friction, dt);
     if (Math.abs(car.speed) < 0.01) car.speed = 0;
     car.speed = Math.max(-car.maxSpeed * 0.4, Math.min(car.maxSpeed, car.speed));
 
-    car.x += Math.cos(car.angle) * car.speed;
-    car.y += Math.sin(car.angle) * car.speed;
+    car.x += Math.cos(car.angle) * car.speed * dt;
+    car.y += Math.sin(car.angle) * car.speed * dt;
 
     // Camera smoothly follows car
-    cam.x += (car.x - GW / 2 - cam.x) * 0.08;
-    cam.y += (car.y - GH / 2 - cam.y) * 0.08;
+    cam.x += (car.x - GW / 2 - cam.x) * (1 - Math.pow(1 - 0.08, dt));
+    cam.y += (car.y - GH / 2 - cam.y) * (1 - Math.pow(1 - 0.08, dt));
 
     // Check rocket (back to space)
     {
@@ -723,7 +741,7 @@ function update() {
 
             if (w.phase === 0 || w.phase === 4) {
                 // Pause at truck
-                w.t += 0.005;
+                w.t += 0.005 * dt;
                 w.w1x = truckBackX; w.w1y = truckBackY;
                 w.w2x = truckBackX; w.w2y = truckBackY + 5;
                 w.carrying = false;
@@ -732,7 +750,7 @@ function update() {
                 const dx = dest1X - truckBackX, dy = dest1Y - truckBackY;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 w.dirX = dx / dist; w.dirY = dy / dist;
-                w.t += walkSpeed / Math.max(dist, 1);
+                w.t += walkSpeed / Math.max(dist, 1) * dt;
                 const p = Math.min(w.t, 1);
                 w.w1x = truckBackX + dx * p;
                 w.w1y = truckBackY + dy * p;
@@ -740,7 +758,7 @@ function update() {
                 w.carrying = true;
             } else if (w.phase === 2) {
                 // Set down light 1
-                w.t += 0.008;
+                w.t += 0.008 * dt;
                 w.w1x = dest1X; w.w1y = dest1Y;
                 w.w2x = dest1X + 3; w.w2y = dest1Y + 5;
                 w.carrying = false;
@@ -750,7 +768,7 @@ function update() {
                 const dx = truckBackX - dest1X, dy = truckBackY - dest1Y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 w.dirX = dx / dist; w.dirY = dy / dist;
-                w.t += walkSpeed / Math.max(dist, 1);
+                w.t += walkSpeed / Math.max(dist, 1) * dt;
                 const p = Math.min(w.t, 1);
                 w.w1x = dest1X + dx * p;
                 w.w1y = dest1Y + dy * p;
@@ -761,7 +779,7 @@ function update() {
                 const dx = dest2X - truckBackX, dy = dest2Y - truckBackY;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 w.dirX = dx / dist; w.dirY = dy / dist;
-                w.t += walkSpeed / Math.max(dist, 1);
+                w.t += walkSpeed / Math.max(dist, 1) * dt;
                 const p = Math.min(w.t, 1);
                 w.w1x = truckBackX + dx * p;
                 w.w1y = truckBackY + dy * p;
@@ -769,7 +787,7 @@ function update() {
                 w.carrying = true;
             } else if (w.phase === 6) {
                 // Set down light 2
-                w.t += 0.008;
+                w.t += 0.008 * dt;
                 w.w1x = dest2X; w.w1y = dest2Y;
                 w.w2x = dest2X + 3; w.w2y = dest2Y + 5;
                 w.carrying = false;
@@ -779,7 +797,7 @@ function update() {
                 const dx = truckBackX - dest2X, dy = truckBackY - dest2Y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 w.dirX = dx / dist; w.dirY = dy / dist;
-                w.t += walkSpeed / Math.max(dist, 1);
+                w.t += walkSpeed / Math.max(dist, 1) * dt;
                 const p = Math.min(w.t, 1);
                 w.w1x = dest2X + dx * p;
                 w.w1y = dest2Y + dy * p;
@@ -815,7 +833,7 @@ function update() {
 
     // Truck departure state machine
     if (truck.state === 'loading') {
-        truck.stateT++;
+        truck.stateT += dt;
         if (truck.stateT > 90) {
             truck.state = 'driving';
             truck.stateT = 0;
@@ -827,7 +845,7 @@ function update() {
         const dx = wp.x - truck.x;
         const dy = wp.y - truck.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const speed = 0.6;
+        const speed = 0.6 * dt;
 
         // Update facing based on movement direction
         if (Math.abs(dx) > Math.abs(dy)) {
@@ -850,12 +868,47 @@ function update() {
             truck.y += (dy / dist) * speed;
         }
     } else if (truck.state === 'fading') {
-        truck.stateT++;
-        truck.y -= 0.6;
+        truck.stateT += dt;
+        truck.y -= 0.6 * dt;
         truck.facing = 'up';
         truck.alpha = Math.max(0, 1 - truck.stateT / 180); // 3s at 60fps
         if (truck.alpha <= 0) {
             truck.state = 'gone';
+        }
+    }
+
+    // Police car state machine
+    if (policeCar.state === 'waiting') {
+        policeCar.stateT += dt;
+        if (policeCar.stateT >= 600) {
+            policeCar.state = 'driving';
+            policeCar.stateT = 0;
+            policeCar.waypointIdx = 0;
+        }
+    } else if (policeCar.state === 'driving') {
+        const wp = policeWaypoints[policeCar.waypointIdx];
+        const dx = wp.x - policeCar.x;
+        const dy = wp.y - policeCar.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const speed = 0.6 * dt;
+
+        if (Math.abs(dx) > Math.abs(dy)) {
+            policeCar.facing = dx > 0 ? 'right' : 'left';
+        } else {
+            policeCar.facing = dy > 0 ? 'down' : 'up';
+        }
+
+        if (dist < speed) {
+            policeCar.x = wp.x;
+            policeCar.y = wp.y;
+            policeCar.waypointIdx++;
+            if (policeCar.waypointIdx >= policeWaypoints.length) {
+                policeCar.state = 'parked';
+                policeCar.stateT = 0;
+            }
+        } else {
+            policeCar.x += (dx / dist) * speed;
+            policeCar.y += (dy / dist) * speed;
         }
     }
 
@@ -867,7 +920,7 @@ function update() {
         if (cr.state === 'working') {
             // Normal 3-phase animation (swing, raise, drive)
             const speed = 0.0015;
-            cr.t += speed;
+            cr.t += speed * dt;
             if (cr.t >= 1) {
                 cr.t = 0;
                 cr.phase = (cr.phase + 1) % 3;
@@ -901,9 +954,9 @@ function update() {
             }
         } else if (cr.state === 'lowering') {
             // Lower boom at same speed as lifting (0.003) — starts early enough to be ready
-            cr.stateT += 0.003;
-            cr.boomSwing *= 0.95; // smoothly zero out any residual swing
-            cr.driveOffset *= 0.95;
+            cr.stateT += 0.003 * dt;
+            cr.boomSwing *= Math.pow(0.95, dt); // smoothly zero out any residual swing
+            cr.driveOffset *= Math.pow(0.95, dt);
             const from = cr.lowerFrom || 0;
             const t = Math.min(cr.stateT, 1);
             cr.boomRaise = from + (-0.83 - from) * t;
@@ -917,7 +970,7 @@ function update() {
             }
         } else if (cr.state === 'lifting') {
             // Raise boom with light attached
-            cr.stateT += 0.003;
+            cr.stateT += 0.003 * dt;
             cr.boomRaise = -0.83 + cr.stateT * 1.83; // -0.83 → 1.0
             cr.boomSwing = 0;
             cr.driveOffset = 0;
@@ -947,7 +1000,7 @@ function update() {
     }
     for (const f of bbFlash) {
         if (f.triggered && f.count < 4) {
-            f.timer++;
+            f.timer += dt;
             // First 2 blinks fast (5 frames), last 2 slow (10 frames)
             const speed = f.count < 2 ? 5 : 10;
             if (f.timer >= speed) {
@@ -1057,6 +1110,9 @@ function draw() {
         if (s.y < car.y) drawTree(s.x, s.y);
     }
 
+    // Draw police car (behind car)
+    if (policeCar.state !== 'waiting' && policeCar.y < car.y) drawPoliceCarScene();
+
     // Draw truck & workers (behind car)
     if (truck.state !== 'gone' && truck.y < car.y) {
         drawTruckScene();
@@ -1110,6 +1166,9 @@ function draw() {
     for (let i = 0; i < cranes.length; i++) {
         if (cranes[i].y >= car.y) drawCrane(i);
     }
+
+    // Draw police car (in front of car)
+    if (policeCar.state !== 'waiting' && policeCar.y >= car.y) drawPoliceCarScene();
 
     // Draw truck & workers (in front of car)
     if (truck.state !== 'gone' && truck.y >= car.y) {
@@ -2041,6 +2100,181 @@ function drawTruckHeadlights() {
     ctx.restore();
 }
 
+// ── Police Car Drawing ──────────────────────────────────────────────
+
+function drawPoliceCarScene() {
+    if (policeCar.state === 'waiting') return;
+    if (policeCar.facing === 'down') drawPoliceCarDown();
+    else if (policeCar.facing === 'right') drawPoliceCarRight();
+    else if (policeCar.facing === 'left') drawPoliceCarLeft();
+    else drawPoliceCarDown(); // fallback
+}
+
+function drawPoliceCarLightBar(barCX, barCY) {
+    const flashLeft = Math.floor(Date.now() / 300) % 2 === 0;
+    const lx = (barCX - 2 - cam.x) * PIXEL;
+    const rx = (barCX + 2 - cam.x) * PIXEL;
+    const ly = (barCY - cam.y) * PIXEL;
+    const glowRad = 12 * PIXEL;
+    const gL = ctx.createRadialGradient(lx, ly, 0, lx, ly, glowRad);
+    gL.addColorStop(0, flashLeft ? 'rgba(255,50,50,0.3)' : 'rgba(50,80,255,0.3)');
+    gL.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gL;
+    ctx.fillRect(lx - glowRad, ly - glowRad, glowRad * 2, glowRad * 2);
+    const gR = ctx.createRadialGradient(rx, ly, 0, rx, ly, glowRad);
+    gR.addColorStop(0, flashLeft ? 'rgba(50,80,255,0.3)' : 'rgba(255,50,50,0.3)');
+    gR.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gR;
+    ctx.fillRect(rx - glowRad, ly - glowRad, glowRad * 2, glowRad * 2);
+}
+
+function drawPoliceCarDown() {
+    const cx = policeCar.x;
+    const cy = policeCar.y;
+    const flashLeft = Math.floor(Date.now() / 300) % 2 === 0;
+
+    // Shadow
+    px(cx - 4, cy + 8, 8, 3, 'rgba(0,0,0,0.15)');
+    // Wheels
+    px(cx - 5.5, cy + 4, 2, 4, '#222');
+    px(cx + 3.5, cy + 4, 2, 4, '#222');
+    px(cx - 5.5, cy - 6, 2, 4, '#222');
+    px(cx + 3.5, cy - 6, 2, 4, '#222');
+    // Body
+    px(cx - 4, cy - 7, 8, 14, '#e8e8e8');
+    // Hood (front = bottom)
+    px(cx - 4, cy + 3, 8, 4, '#ddd');
+    // Black stripe
+    px(cx - 4, cy - 1, 8, 1.5, '#222');
+    // Rear windshield (top)
+    px(cx - 3, cy - 6, 6, 3, '#446688');
+    // Front windshield (bottom)
+    px(cx - 3, cy + 4, 6, 2, '#446688');
+    // Light bar
+    px(cx - 3, cy - 2, 2.5, 2, flashLeft ? '#ff0000' : '#0044ff');
+    px(cx + 0.5, cy - 2, 2.5, 2, flashLeft ? '#0044ff' : '#ff0000');
+    drawPoliceCarLightBar(cx, cy - 1);
+    // Headlights (bottom = front)
+    px(cx - 3, cy + 7.5, 2, 1.5, '#ffee88');
+    px(cx + 1, cy + 7.5, 2, 1.5, '#ffee88');
+    // Tail lights (top = rear)
+    px(cx - 3.5, cy - 8, 2, 1, '#cc3333');
+    px(cx + 1.5, cy - 8, 2, 1, '#cc3333');
+}
+
+function drawPoliceCarRight() {
+    const cx = policeCar.x;
+    const cy = policeCar.y;
+    const flashLeft = Math.floor(Date.now() / 300) % 2 === 0;
+
+    // Shadow
+    px(cx - 3, cy + 5, 14, 3, 'rgba(0,0,0,0.15)');
+    // Wheels
+    px(cx - 6, cy + 3, 4, 2, '#222');
+    px(cx + 4, cy + 3, 4, 2, '#222');
+    px(cx - 6, cy - 3, 4, 2, '#222');
+    px(cx + 4, cy - 3, 4, 2, '#222');
+    // Body (side view, longer horizontal)
+    px(cx - 7, cy - 4, 14, 8, '#e8e8e8');
+    // Hood (right = front)
+    px(cx + 3, cy - 4, 4, 8, '#ddd');
+    // Black stripe
+    px(cx - 7, cy, 14, 1.5, '#222');
+    // Rear windshield (left)
+    px(cx - 6, cy - 3, 3, 6, '#446688');
+    // Front windshield (right)
+    px(cx + 4, cy - 3, 2, 6, '#446688');
+    // Light bar
+    px(cx - 2, cy - 5, 2.5, 2, flashLeft ? '#ff0000' : '#0044ff');
+    px(cx + 0.5, cy - 5, 2.5, 2, flashLeft ? '#0044ff' : '#ff0000');
+    drawPoliceCarLightBar(cx, cy - 4);
+    // Headlights (right = front)
+    px(cx + 7.5, cy - 2, 1.5, 2, '#ffee88');
+    px(cx + 7.5, cy + 1, 1.5, 2, '#ffee88');
+    // Tail lights (left = rear)
+    px(cx - 8, cy - 2, 1, 2, '#cc3333');
+    px(cx - 8, cy + 1, 1, 2, '#cc3333');
+}
+
+function drawPoliceCarLeft() {
+    const cx = policeCar.x;
+    const cy = policeCar.y;
+    const flashLeft = Math.floor(Date.now() / 300) % 2 === 0;
+
+    // Shadow
+    px(cx - 11, cy + 5, 14, 3, 'rgba(0,0,0,0.15)');
+    // Wheels
+    px(cx - 8, cy + 3, 4, 2, '#222');
+    px(cx + 2, cy + 3, 4, 2, '#222');
+    px(cx - 8, cy - 3, 4, 2, '#222');
+    px(cx + 2, cy - 3, 4, 2, '#222');
+    // Body (side view, longer horizontal)
+    px(cx - 7, cy - 4, 14, 8, '#e8e8e8');
+    // Hood (left = front)
+    px(cx - 7, cy - 4, 4, 8, '#ddd');
+    // Black stripe
+    px(cx - 7, cy, 14, 1.5, '#222');
+    // Rear windshield (right)
+    px(cx + 3, cy - 3, 3, 6, '#446688');
+    // Front windshield (left)
+    px(cx - 6, cy - 3, 2, 6, '#446688');
+    // Light bar
+    px(cx - 3, cy - 5, 2.5, 2, flashLeft ? '#ff0000' : '#0044ff');
+    px(cx + 0.5, cy - 5, 2.5, 2, flashLeft ? '#0044ff' : '#ff0000');
+    drawPoliceCarLightBar(cx, cy - 4);
+    // Headlights (left = front)
+    px(cx - 9, cy - 2, 1.5, 2, '#ffee88');
+    px(cx - 9, cy + 1, 1.5, 2, '#ffee88');
+    // Tail lights (right = rear)
+    px(cx + 7, cy - 2, 1, 2, '#cc3333');
+    px(cx + 7, cy + 1, 1, 2, '#cc3333');
+}
+
+// ── Police Car Headlight Beams ──────────────────────────────────────
+
+function policeAngle() {
+    if (policeCar.facing === 'right') return 0;
+    if (policeCar.facing === 'left') return Math.PI;
+    if (policeCar.facing === 'up') return -Math.PI / 2;
+    return Math.PI / 2; // down
+}
+
+function drawPoliceHeadlights() {
+    if (policeCar.state === 'waiting') return;
+    const tx = (policeCar.x - cam.x) * PIXEL;
+    const ty = (policeCar.y - cam.y) * PIXEL;
+    const s = PIXEL;
+    const dark = getDarkness();
+    const baseAlpha = Math.max(0.15, Math.min(0.4, dark * 0.5 + 0.15));
+
+    const angle = policeAngle();
+
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(angle);
+
+    const coneLen = 40 * s;
+    const coneW = 8 * s;
+    const fwd = 5 * s;
+    const offsets = [-1.5 * s, 1.5 * s];
+
+    for (const off of offsets) {
+        const grad = ctx.createLinearGradient(fwd, 0, fwd + coneLen, 0);
+        grad.addColorStop(0, `rgba(255, 238, 120, ${baseAlpha})`);
+        grad.addColorStop(0.5, `rgba(255, 238, 120, ${baseAlpha * 0.3})`);
+        grad.addColorStop(1, 'rgba(255, 238, 120, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(fwd, off);
+        ctx.lineTo(fwd + coneLen, off - coneW);
+        ctx.lineTo(fwd + coneLen, off + coneW);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
 // ── Crane Light Beams (HMIs illuminating rocket at night) ───────────
 
 function drawCraneLightBeams(darkness) {
@@ -2397,6 +2631,43 @@ function drawDarknessWithLights() {
         darkCtx.restore();
     }
 
+    // --- Police car headlights + light bar ---
+    if (policeCar.state !== 'waiting') {
+        const pcx = (policeCar.x - cam.x) * PIXEL;
+        const pcy = (policeCar.y - cam.y) * PIXEL;
+        const s = PIXEL;
+        // Headlights facing current direction
+        darkCtx.save();
+        darkCtx.translate(pcx, pcy);
+        darkCtx.rotate(policeAngle());
+        const coneLen = 40 * s;
+        const coneW = 8 * s;
+        const fwd = 5 * s;
+        const offsets = [-1.5 * s, 1.5 * s];
+        for (const off of offsets) {
+            const grad = darkCtx.createLinearGradient(fwd, 0, fwd + coneLen, 0);
+            grad.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.9})`);
+            grad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.5})`);
+            grad.addColorStop(0.7, `rgba(255,255,255,${cutAlpha * 0.15})`);
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = grad;
+            darkCtx.beginPath();
+            darkCtx.moveTo(fwd, off);
+            darkCtx.lineTo(fwd + coneLen, off - coneW);
+            darkCtx.lineTo(fwd + coneLen, off + coneW);
+            darkCtx.closePath();
+            darkCtx.fill();
+        }
+        darkCtx.restore();
+        // Light bar glow cutout
+        const barGlow = darkCtx.createRadialGradient(pcx, pcy, 0, pcx, pcy, 12 * s);
+        barGlow.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.5})`);
+        barGlow.addColorStop(0.5, `rgba(255,255,255,${cutAlpha * 0.15})`);
+        barGlow.addColorStop(1, 'rgba(255,255,255,0)');
+        darkCtx.fillStyle = barGlow;
+        darkCtx.fillRect(pcx - 12 * s, pcy - 12 * s, 24 * s, 24 * s);
+    }
+
     // --- Work light poles (bright downward pools at dirt area) ---
     for (const wl of workLights) {
         const towardX = dirtCX - wl.x;
@@ -2493,6 +2764,26 @@ function drawDarknessWithLights() {
         if (truck.state === 'driving' || truck.state === 'fading') {
             drawTruckHeadlights();
         }
+        if (policeCar.state !== 'waiting') {
+            drawPoliceHeadlights();
+            // Light bar colored glow
+            const pcx = (policeCar.x - cam.x) * PIXEL;
+            const pcy = (policeCar.y - cam.y) * PIXEL;
+            const flashLeft = Math.floor(Date.now() / 300) % 2 === 0;
+            const barR = 10 * PIXEL;
+            // Left bar
+            const lgL = ctx.createRadialGradient(pcx - 1.25 * PIXEL, pcy, 0, pcx - 1.25 * PIXEL, pcy, barR);
+            lgL.addColorStop(0, flashLeft ? `rgba(255,0,0,${darkness * 0.3})` : `rgba(0,80,255,${darkness * 0.3})`);
+            lgL.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = lgL;
+            ctx.fillRect(pcx - 1.25 * PIXEL - barR, pcy - barR, barR * 2, barR * 2);
+            // Right bar
+            const lgR = ctx.createRadialGradient(pcx + 1.25 * PIXEL, pcy, 0, pcx + 1.25 * PIXEL, pcy, barR);
+            lgR.addColorStop(0, flashLeft ? `rgba(0,80,255,${darkness * 0.3})` : `rgba(255,0,0,${darkness * 0.3})`);
+            lgR.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = lgR;
+            ctx.fillRect(pcx + 1.25 * PIXEL - barR, pcy - barR, barR * 2, barR * 2);
+        }
         // Work light sodium vapor glow + beams
         drawWorkLightBeams(darkness);
         for (const wl of workLights) {
@@ -2532,12 +2823,18 @@ function drawDarknessWithLights() {
 
 // ── Game Loop ───────────────────────────────────────────────────────
 
-function loop() {
+let lastTime = performance.now();
+
+function loop(now) {
     if (!running) return;
-    update();
+    const elapsed = now - lastTime;
+    lastTime = now;
+    // dt = 1.0 at 60fps, 2.0 at 30fps, etc. Clamped to avoid spiral of death.
+    const dt = Math.min(elapsed / (1000 / 60), 3);
+    update(dt);
     draw();
     requestAnimationFrame(loop);
 }
 
 running = true;
-loop();
+requestAnimationFrame(loop);
