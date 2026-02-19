@@ -93,7 +93,9 @@ const C = {
     tree: '#1d5a1d',
     treeTrunk: '#6b4226',
     white: '#ffffff',
-    arrow: '#ffff44'
+    arrow: '#ffff44',
+    sand1: '#d4b896',
+    sand2: '#c9a882'
 };
 
 // ── World Layout ────────────────────────────────────────────────────
@@ -105,6 +107,23 @@ const CROSS_Y = 0;       // crossroads Y center
 const CROSS_X = 0;       // crossroads X center
 const START_Y = 400;     // car start offset below crossroads (longer approach)
 const ZONE_DIST = 120;   // distance from crossroads to trigger zone
+
+// ── Sand Lot (left of north-south road) ─────────────────────────────
+
+const sandLot = {
+    x: CROSS_X - ROAD_W / 2 - 200,   // left edge
+    y: CROSS_Y + 50,                   // just below crossroads
+    w: 200,                             // width
+    h: 250                              // height (extends south along road)
+};
+
+// ── Sound Stages on sand lot ────────────────────────────────────────
+
+const soundStages = [
+    { x: sandLot.x + sandLot.w - 45, y: sandLot.y + 35, label: 'STAGE 1' },
+    { x: sandLot.x + sandLot.w - 145, y: sandLot.y + 35, label: 'STAGE 2',
+      doorOpen: 0, doorState: 'closed' }  // 1 = fully open, 0 = closed
+];
 
 // ── Rocket (back to space) ───────────────────────────────────────────
 
@@ -130,26 +149,26 @@ const cranes = [
 // ── Box Truck & Workers ─────────────────────────────────────────────
 
 const truck = {
-    x: rocket.x + 75,
-    y: rocket.y + 25,
-    startX: rocket.x + 75,
-    startY: rocket.y + 25,
+    x: rocket.x - 75,
+    y: rocket.y + 10,
+    startX: rocket.x - 75,
+    startY: rocket.y + 10,
     state: 'parked',   // parked → loading → driving → fading → gone
     stateT: 0,
     alpha: 1,
-    facing: 'right',
+    facing: 'left',
     waypointIdx: 0
 };
 
-// Access road connecting truck area to main road
-const ACCESS_EAST = Math.round(truck.startX + 56);   // east end of parking segment
-const ACCESS_CONNECT_Y = Math.round(truck.startY - 50); // where it meets main road
-
+const stage2 = { x: sandLot.x + sandLot.w - 145, y: sandLot.y + 35 };
 const truckWaypoints = [
-    { x: ACCESS_EAST, y: truck.startY },            // drive right to east end
-    { x: ACCESS_EAST, y: ACCESS_CONNECT_Y },         // drive north to corner
-    { x: CROSS_X, y: ACCESS_CONNECT_Y },             // drive left to main road
-    { x: CROSS_X, y: CROSS_Y - 250 }                 // drive north and away
+    { x: truck.startX, y: rocket.y + 40 },             // drive south to clear dirt area
+    { x: ROAD_W / 2 + 15, y: rocket.y + 40 },         // drive east past rocket (right side)
+    { x: ROAD_W / 2 + 15, y: rocket.y - 30 },         // drive north past dirt area
+    { x: CROSS_X, y: rocket.y - 30 },                  // merge onto road
+    { x: CROSS_X, y: stage2.y + 25 + 20 },             // drive north past Stage 2 door level
+    { x: stage2.x, y: stage2.y + 25 + 20 },           // drive west to Stage 2 entrance
+    { x: stage2.x, y: stage2.y + 25 + 5 }             // drive north to door
 ];
 
 // Lights delivered to each crane — drop positions match where the hook lands when lowered
@@ -168,7 +187,7 @@ const workers = {
     w1x: 0, w1y: 0,
     w2x: 0, w2y: 0,
     carrying: false,
-    dirX: -1, dirY: 0  // facing direction (normalized), default: facing left toward cranes
+    dirX: 1, dirY: 0  // facing direction (normalized), default: facing right toward cranes
 };
 
 // ── Police Car NPC ──────────────────────────────────────────────────
@@ -183,17 +202,18 @@ const policeCar = {
 
 const policeWaypoints = [
     { x: CROSS_X, y: CROSS_Y },
-    { x: CROSS_X, y: ACCESS_CONNECT_Y },
-    { x: ACCESS_EAST, y: ACCESS_CONNECT_Y },
-    { x: ACCESS_EAST, y: truck.startY },
-    { x: truck.startX, y: truck.startY }
+    { x: CROSS_X, y: rocket.y - 30 },                  // drive south to end of road
+    { x: ROAD_W / 2 + 15, y: rocket.y - 30 },         // off-road right to avoid rocket
+    { x: ROAD_W / 2 + 15, y: rocket.y + 40 },         // south past dirt area
+    { x: truck.startX, y: rocket.y + 40 },             // west across bottom
+    { x: truck.startX, y: truck.startY }               // north to truck
 ];
 
 // ── Car ─────────────────────────────────────────────────────────────
 
 const car = {
     x: CROSS_X,
-    y: ACCESS_CONNECT_Y - 10,
+    y: rocket.y - 50,
     angle: -Math.PI / 2, // facing up
     speed: 0,
     maxSpeed: 1.2,
@@ -217,7 +237,7 @@ let arrived = null; // which zone the car reached
 const scenery = [];
 
 // Trees along the main road (vertical) — extended for longer approach
-for (let y = -250; y <= START_Y + 50; y += 18 + Math.floor(Math.random() * 12)) {
+for (let y = -250; y <= START_Y + 100; y += 18 + Math.floor(Math.random() * 12)) {
     if (Math.abs(y - CROSS_Y) < 40) continue; // gap at crossroads
     scenery.push({ type: 'tree', x: CROSS_X - ROAD_W / 2 - 8 - Math.random() * 15, y });
     scenery.push({ type: 'tree', x: CROSS_X + ROAD_W / 2 + 8 + Math.random() * 15, y });
@@ -283,24 +303,12 @@ for (let i = scenery.length - 1; i >= 0; i--) {
     }
 }
 
-// Remove trees near access road segments
+// Remove trees inside sand lot
 for (let i = scenery.length - 1; i >= 0; i--) {
     const s = scenery[i];
-    const margin = ROAD_W / 2 + 8;
-    // H1: parking segment
-    if (s.x > truck.startX - 20 && s.x < ACCESS_EAST + margin &&
-        Math.abs(s.y - truck.startY) < margin) {
-        scenery.splice(i, 1); continue;
-    }
-    // V1: northbound segment
-    if (Math.abs(s.x - ACCESS_EAST) < margin &&
-        s.y > ACCESS_CONNECT_Y - margin && s.y < truck.startY + margin) {
-        scenery.splice(i, 1); continue;
-    }
-    // H2: westbound connector
-    if (s.x > CROSS_X + margin && s.x < ACCESS_EAST + margin &&
-        Math.abs(s.y - ACCESS_CONNECT_Y) < margin) {
-        scenery.splice(i, 1); continue;
+    if (s.x > sandLot.x - 5 && s.x < sandLot.x + sandLot.w + 5 &&
+        s.y > sandLot.y - 5 && s.y < sandLot.y + sandLot.h + 5) {
+        scenery.splice(i, 1);
     }
 }
 
@@ -318,12 +326,11 @@ const dirtCX = rocket.x;
 const dirtCY = rocket.y + 5;
 const dirtW = 140;
 const dirtH = 60;
-// Inset from edges: top row below access road, east side clear of truck parking road (x<57)
 const workLights = [
-    { x: dirtCX - dirtW / 2 + 5,  y: dirtCY - dirtH / 2 + 18 }, // NW
-    { x: dirtCX + dirtW / 2 - 22, y: dirtCY - dirtH / 2 + 18 }, // NE (inset from access road)
-    { x: dirtCX - dirtW / 2 + 5,  y: dirtCY + dirtH / 2 - 5 },  // SW
-    { x: dirtCX + dirtW / 2 - 22, y: dirtCY + dirtH / 2 - 5 },  // SE (inset from truck road)
+    { x: dirtCX - dirtW / 2, y: dirtCY - dirtH / 2 },     // NW corner
+    { x: dirtCX + dirtW / 2, y: dirtCY - dirtH / 2 },     // NE corner
+    { x: dirtCX - dirtW / 2, y: dirtCY + dirtH / 2 },     // SW corner
+    { x: dirtCX + dirtW / 2, y: dirtCY + dirtH / 2 },     // SE corner
 ];
 
 // Destination buildings
@@ -729,7 +736,7 @@ function update(dt) {
     {
         const w = workers;
         if (!w.done) {
-            const truckBackX = truck.x - 10;
+            const truckBackX = truck.x + 10;
             const truckBackY = truck.y + 8;
             // Trip 1 → right crane (closer), Trip 2 → left crane (farther)
             const dest1X = craneLights[1].dropX;
@@ -818,10 +825,10 @@ function update(dt) {
 
         // During loading: workers walk to cab then get in
         if (truck.state === 'loading') {
-            const cabX = truck.x + 10;
+            const cabX = truck.x - 10;
             const cabY = truck.y - 2;
-            const idleX1 = truck.startX - 10, idleY1 = truck.startY + 8;
-            const idleX2 = truck.startX - 7, idleY2 = truck.startY + 13;
+            const idleX1 = truck.startX + 10, idleY1 = truck.startY + 8;
+            const idleX2 = truck.startX + 7, idleY2 = truck.startY + 13;
             const lt = Math.min(truck.stateT / 60, 1);
             w.w1x = idleX1 + (cabX - idleX1) * lt;
             w.w1y = idleY1 + (cabY - idleY1) * lt;
@@ -858,8 +865,12 @@ function update(dt) {
             truck.x = wp.x;
             truck.y = wp.y;
             truck.waypointIdx++;
+            // Open doors early when truck turns toward stage
+            if (truck.waypointIdx === 5 && soundStages[1].doorState === 'closed') {
+                soundStages[1].doorState = 'opening';
+            }
             if (truck.waypointIdx >= truckWaypoints.length) {
-                truck.state = 'fading';
+                truck.state = 'entering';
                 truck.stateT = 0;
                 truck.facing = 'up';
             }
@@ -867,13 +878,33 @@ function update(dt) {
             truck.x += (dx / dist) * speed;
             truck.y += (dy / dist) * speed;
         }
-    } else if (truck.state === 'fading') {
+    } else if (truck.state === 'entering') {
+        // Truck drives into Stage 2
         truck.stateT += dt;
-        truck.y -= 0.6 * dt;
+        truck.y -= 0.4 * dt;
         truck.facing = 'up';
-        truck.alpha = Math.max(0, 1 - truck.stateT / 180); // 3s at 60fps
+        truck.alpha = Math.max(0, 1 - truck.stateT / 120);
         if (truck.alpha <= 0) {
             truck.state = 'gone';
+            soundStages[1].doorState = 'closing';
+        }
+    }
+
+    // Stage 2 door animation
+    {
+        const s2 = soundStages[1];
+        if (s2.doorState === 'opening') {
+            s2.doorOpen = Math.min(1, s2.doorOpen + 0.008 * dt);
+            if (s2.doorOpen >= 1) {
+                s2.doorOpen = 1;
+                s2.doorState = 'open';
+            }
+        } else if (s2.doorState === 'closing') {
+            s2.doorOpen = Math.max(0, s2.doorOpen - 0.008 * dt);
+            if (s2.doorOpen <= 0) {
+                s2.doorOpen = 0;
+                s2.doorState = 'closed';
+            }
         }
     }
 
@@ -905,6 +936,7 @@ function update(dt) {
             if (policeCar.waypointIdx >= policeWaypoints.length) {
                 policeCar.state = 'parked';
                 policeCar.stateT = 0;
+                policeCar.facing = 'left';
             }
         } else {
             policeCar.x += (dx / dist) * speed;
@@ -1090,6 +1122,17 @@ function draw() {
         }
     }
 
+    // Sand lot (left of north-south road)
+    px(sandLot.x, sandLot.y, sandLot.w, sandLot.h, C.sand1);
+    // Sand variation patches
+    for (let sx = sandLot.x; sx < sandLot.x + sandLot.w; sx += 10) {
+        for (let sy = sandLot.y; sy < sandLot.y + sandLot.h; sy += 10) {
+            if ((Math.floor(sx / 10) + Math.floor(sy / 10)) % 3 === 0) {
+                px(sx, sy, 10, 10, C.sand2);
+            }
+        }
+    }
+
     // Dirt work site around rocket and cranes
     px(dirtCX - dirtW / 2, dirtCY - dirtH / 2, dirtW, dirtH, C.dirt);
     // Subtle variation patches on the dirt
@@ -1134,6 +1177,11 @@ function draw() {
     // Draw destination buildings
     for (const dest of destinations) {
         drawBuilding(dest.x, dest.y, dest.label);
+    }
+
+    // Draw sound stages (always behind car)
+    for (const stage of soundStages) {
+        drawSoundStage(stage);
     }
 
     // Draw social billboard (behind car if above)
@@ -1197,26 +1245,18 @@ function draw() {
 }
 
 function drawRoads() {
-    // Vertical road (ends at access road T-junction)
-    const roadBottom = ACCESS_CONNECT_Y + ROAD_W / 2;
-    px(CROSS_X - ROAD_W / 2, CROSS_Y - 200, ROAD_W, roadBottom - (CROSS_Y - 200), C.road);
+    const hw = ROAD_W / 2;
+    const roadBottom = dirtCY - dirtH / 2;
+
+    // Vertical road
+    px(CROSS_X - hw, CROSS_Y - 200, ROAD_W, roadBottom - (CROSS_Y - 200), C.road);
 
     // Horizontal road (left to Lights, right to Grip)
-    px(CROSS_X - 200, CROSS_Y - ROAD_W / 2, 400, ROAD_W, C.road);
+    px(CROSS_X - 200, CROSS_Y - hw, 400, ROAD_W, C.road);
 
-    // Access road: truck parking → east → north → west → main road
-    const hw = ROAD_W / 2;
-    // H1: parking segment (east-west at truck Y)
-    px(truck.startX - 18, truck.startY - hw, ACCESS_EAST - (truck.startX - 18) + hw, ROAD_W, C.road);
-    // V1: northbound segment (at ACCESS_EAST)
-    px(ACCESS_EAST - hw, ACCESS_CONNECT_Y - hw, ROAD_W, truck.startY - ACCESS_CONNECT_Y + ROAD_W, C.road);
-    // H2: westbound connector (at ACCESS_CONNECT_Y, to main road)
-    px(CROSS_X - hw, ACCESS_CONNECT_Y - hw, ACCESS_EAST - CROSS_X + ROAD_W, ROAD_W, C.road);
-
-    // Center line dashes — main vertical (extended)
+    // Center line dashes — main vertical
     for (let y = CROSS_Y - 200; y < roadBottom; y += 8) {
         if (Math.abs(y - CROSS_Y) < hw) continue;
-        if (Math.abs(y - ACCESS_CONNECT_Y) < hw) continue; // skip access T-junction
         px(CROSS_X - 0.5, y, 1, 4, C.roadLine);
     }
 
@@ -1224,21 +1264,6 @@ function drawRoads() {
     for (let x = CROSS_X - 200; x < CROSS_X + 200; x += 8) {
         if (Math.abs(x - CROSS_X) < hw) continue;
         px(x, CROSS_Y - 0.5, 4, 1, C.roadLine);
-    }
-
-    // Center line dashes — access H1 (truck parking segment)
-    for (let x = truck.startX - 16; x < ACCESS_EAST - hw; x += 8) {
-        px(x, truck.startY - 0.5, 4, 1, C.roadLine);
-    }
-
-    // Center line dashes — access V1 (northbound)
-    for (let y = ACCESS_CONNECT_Y + hw; y < truck.startY - hw; y += 8) {
-        px(ACCESS_EAST - 0.5, y, 1, 4, C.roadLine);
-    }
-
-    // Center line dashes — access H2 (westbound connector)
-    for (let x = CROSS_X + hw; x < ACCESS_EAST - hw; x += 8) {
-        px(x, ACCESS_CONNECT_Y - 0.5, 4, 1, C.roadLine);
     }
 }
 
@@ -1262,6 +1287,63 @@ function drawTree(x, y) {
     // Drooping tips
     px(x - 9, y - 18, 3, 1, '#1d5a1d');
     px(x + 7, y - 18, 3, 1, '#1d5a1d');
+}
+
+function drawSoundStage(stage) {
+    const x = stage.x, y = stage.y, label = stage.label;
+    const bw = 80;  // building width
+    const bh = 50;  // building height (depth)
+    const doorOpen = stage.doorOpen !== undefined ? stage.doorOpen : 0;
+
+    const doorW = 14;  // half-door width
+    const doorH = 16;
+    const doorY = y + bh / 2 - doorH;
+    const slideOffset = Math.floor(doorOpen * doorW);
+
+    // Dark interior (behind everything)
+    px(x - doorW, doorY, doorW * 2, doorH, '#1a1a22');
+
+    // Main wall
+    px(x - bw / 2, y - bh / 2, bw, bh, '#7a7a88');
+    // Cut out the doorway (redraw interior over wall)
+    px(x - doorW, doorY, doorW * 2, doorH, '#1a1a22');
+
+    // Corrugated roof (ridged top)
+    px(x - bw / 2 - 2, y - bh / 2 - 6, bw + 4, 7, '#606070');
+    // Roof ridges
+    for (let rx = x - bw / 2; rx < x + bw / 2; rx += 6) {
+        px(rx, y - bh / 2 - 6, 3, 7, '#555565');
+    }
+
+    // Small windows along top
+    for (let wx = x - bw / 2 + 8; wx < x + bw / 2 - 8; wx += 12) {
+        px(wx, y - bh / 2 + 4, 5, 4, '#8899aa');
+    }
+
+    // Stage number label
+    pxText(label, x, y - 4, C.white, 14);
+
+    // Door frame (on top of wall)
+    px(x - doorW - 1, doorY - 1, doorW * 2 + 2, 1, '#4a4a58');
+    px(x - doorW - 1, doorY - 1, 1, doorH + 1, '#4a4a58');
+    px(x + doorW, doorY - 1, 1, doorH + 1, '#4a4a58');
+
+    // Doors (on top of everything — slide over the wall)
+    if (doorOpen < 1) {
+        // Left door slides left
+        px(x - doorW - slideOffset, doorY, doorW, doorH, '#555566');
+        // Right door slides right
+        px(x + slideOffset, doorY, doorW, doorH, '#555566');
+    }
+
+    // Door center gap (only when fully closed)
+    if (doorOpen <= 0) {
+        px(x, doorY, 1, doorH, '#3a3a48');
+    }
+
+    // Red light above door
+    const redOn = stage.doorState === 'closed';
+    px(x, doorY - 3, 2, 2, redOn ? '#ff2222' : '#cc3333');
 }
 
 function drawBuilding(x, y, label) {
@@ -1314,12 +1396,12 @@ function drawWorkLight(wl) {
     px(x + armDx, y - 17, 1, 1, '#888');
     px(x + armDx * 2, y - 17, 1, 1, '#777');
 
-    // Fixture head — sodium vapor deep amber
-    px(x + armDx * 2 - 1, y - 16, 3, 1, dark > 0.1 ? '#ff8800' : '#ccc');
+    // Fixture head — warm tungsten
+    px(x + armDx * 2 - 1, y - 16, 3, 1, dark > 0.1 ? '#ffcc66' : '#ccc');
 
     // Glow when dark
     if (dark > 0.1) {
-        px(x + armDx * 2 - 1, y - 15, 3, 1, `rgba(255,136,0,${Math.min(0.7, dark)})`);
+        px(x + armDx * 2 - 1, y - 15, 3, 1, `rgba(255,200,100,${Math.min(0.7, dark)})`);
     }
 }
 
@@ -1332,13 +1414,13 @@ function drawWorkLightBeams(darkness) {
         const armDx = towardX > 0 ? 1 : -1;
         const fx = (wl.x + armDx * 2 - cam.x) * s;
         const fy = (wl.y - 16 - cam.y) * s;
-        // Tight downward cone — sodium vapor deep amber
+        // Tight downward cone — warm tungsten
         const coneLen = 18 * s;
         const coneW = 4 * s; // narrow spread
         const grad = ctx.createLinearGradient(fx, fy, fx, fy + coneLen);
-        grad.addColorStop(0, `rgba(255, 136, 0, ${alpha})`);
-        grad.addColorStop(0.4, `rgba(255, 136, 0, ${alpha * 0.3})`);
-        grad.addColorStop(1, 'rgba(255, 136, 0, 0)');
+        grad.addColorStop(0, `rgba(255, 200, 100, ${alpha})`);
+        grad.addColorStop(0.4, `rgba(255, 200, 100, ${alpha * 0.3})`);
+        grad.addColorStop(1, 'rgba(255, 200, 100, 0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.moveTo(fx - 1 * s, fy);
@@ -1490,6 +1572,12 @@ function drawCrane(idx) {
     ctx.moveTo(hydX1, hydY1);
     ctx.lineTo(hydX2, hydY2);
     ctx.stroke();
+
+    // Single headlamp on front of cab (facing toward rocket)
+    const dark = getDarkness();
+    const hlX = cx + dir * 7;
+    const hlY = cy - 6;
+    px(hlX, hlY, 1, 2, dark > 0.1 ? '#ffee88' : '#ccc');
 }
 
 function drawBillboard(bb, flash) {
@@ -1723,7 +1811,7 @@ invBackBtn.addEventListener('click', () => {
 
     // Reset car on the approach road, facing forward (up)
     car.x = CROSS_X;
-    car.y = CROSS_Y + START_Y - 40;
+    car.y = rocket.y - 50;
     car.speed = 0;
     car.angle = -Math.PI / 2;
     arrived = null;
@@ -1793,7 +1881,7 @@ function drawTruckScene() {
     ctx.globalAlpha = truck.alpha;
 
     if (truck.state === 'parked' || truck.state === 'loading') {
-        drawTruckParked();
+        drawTruckFacingLeft();
     } else if (truck.facing === 'left') {
         drawTruckFacingLeft();
     } else if (truck.facing === 'up') {
@@ -2111,21 +2199,7 @@ function drawPoliceCarScene() {
 }
 
 function drawPoliceCarLightBar(barCX, barCY) {
-    const flashLeft = Math.floor(Date.now() / 300) % 2 === 0;
-    const lx = (barCX - 2 - cam.x) * PIXEL;
-    const rx = (barCX + 2 - cam.x) * PIXEL;
-    const ly = (barCY - cam.y) * PIXEL;
-    const glowRad = 12 * PIXEL;
-    const gL = ctx.createRadialGradient(lx, ly, 0, lx, ly, glowRad);
-    gL.addColorStop(0, flashLeft ? 'rgba(255,50,50,0.3)' : 'rgba(50,80,255,0.3)');
-    gL.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gL;
-    ctx.fillRect(lx - glowRad, ly - glowRad, glowRad * 2, glowRad * 2);
-    const gR = ctx.createRadialGradient(rx, ly, 0, rx, ly, glowRad);
-    gR.addColorStop(0, flashLeft ? 'rgba(50,80,255,0.3)' : 'rgba(255,50,50,0.3)');
-    gR.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gR;
-    ctx.fillRect(rx - glowRad, ly - glowRad, glowRad * 2, glowRad * 2);
+    // No-op — police light beams handled in drawPoliceLightBeams
 }
 
 function drawPoliceCarDown() {
@@ -2275,6 +2349,40 @@ function drawPoliceHeadlights() {
     ctx.restore();
 }
 
+function drawPoliceLightBeams() {
+    if (policeCar.state === 'waiting') return;
+    const tx = (policeCar.x - cam.x) * PIXEL;
+    const ty = (policeCar.y - cam.y) * PIXEL;
+    const s = PIXEL;
+    const flashLeft = Math.floor(Date.now() / 300) % 2 === 0;
+
+    const radius = 45 * s;
+    const redAlpha = flashLeft ? 0.25 : 0.08;
+    const blueAlpha = flashLeft ? 0.08 : 0.25;
+
+    // Red omnidirectional glow
+    const gR = ctx.createRadialGradient(tx - 2 * s, ty, 0, tx - 2 * s, ty, radius);
+    gR.addColorStop(0, `rgba(255, 30, 30, ${redAlpha})`);
+    gR.addColorStop(0.3, `rgba(255, 30, 30, ${redAlpha * 0.5})`);
+    gR.addColorStop(0.6, `rgba(255, 30, 30, ${redAlpha * 0.15})`);
+    gR.addColorStop(1, 'rgba(255, 30, 30, 0)');
+    ctx.fillStyle = gR;
+    ctx.beginPath();
+    ctx.arc(tx - 2 * s, ty, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Blue omnidirectional glow
+    const gB = ctx.createRadialGradient(tx + 2 * s, ty, 0, tx + 2 * s, ty, radius);
+    gB.addColorStop(0, `rgba(30, 60, 255, ${blueAlpha})`);
+    gB.addColorStop(0.3, `rgba(30, 60, 255, ${blueAlpha * 0.5})`);
+    gB.addColorStop(0.6, `rgba(30, 60, 255, ${blueAlpha * 0.15})`);
+    gB.addColorStop(1, 'rgba(30, 60, 255, 0)');
+    ctx.fillStyle = gB;
+    ctx.beginPath();
+    ctx.arc(tx + 2 * s, ty, radius, 0, Math.PI * 2);
+    ctx.fill();
+}
+
 // ── Crane Light Beams (HMIs illuminating rocket at night) ───────────
 
 function drawCraneLightBeams(darkness) {
@@ -2282,15 +2390,15 @@ function drawCraneLightBeams(darkness) {
         const cl = craneLights[i];
         if (!cl.pickedUp || cranes[i].state !== 'holding') continue;
 
-        const alpha = Math.min(0.45, darkness * 0.6);
+        const alpha = Math.min(0.7, darkness * 0.9);
 
         // HMI lens glow
         const glowX = (cl.beamX - cam.x) * PIXEL;
         const glowY = (cl.beamY - cam.y) * PIXEL;
-        const glowRad = 8 * PIXEL;
+        const glowRad = 14 * PIXEL;
         const glowGrad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowRad);
-        glowGrad.addColorStop(0, `rgba(255, 250, 220, ${alpha * 0.8})`);
-        glowGrad.addColorStop(0.3, `rgba(255, 240, 180, ${alpha * 0.3})`);
+        glowGrad.addColorStop(0, `rgba(255, 250, 230, ${alpha})`);
+        glowGrad.addColorStop(0.3, `rgba(255, 245, 200, ${alpha * 0.5})`);
         glowGrad.addColorStop(1, 'rgba(255, 240, 180, 0)');
         ctx.fillStyle = glowGrad;
         ctx.fillRect(glowX - glowRad, glowY - glowRad, glowRad * 2, glowRad * 2);
@@ -2311,12 +2419,12 @@ function drawCraneLightBeams(darkness) {
         // Perpendicular for cone spread
         const px2 = -ny;
         const py2 = nx;
-        const spread = 25 * PIXEL;
+        const spread = 30 * PIXEL;
 
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(lightX - px2 * 3, lightY - py2 * 3);
-        ctx.lineTo(lightX + px2 * 3, lightY + py2 * 3);
+        ctx.moveTo(lightX - px2 * 5, lightY - py2 * 5);
+        ctx.lineTo(lightX + px2 * 5, lightY + py2 * 5);
         ctx.lineTo(targetX + px2 * spread, targetY + py2 * spread);
         ctx.lineTo(targetX - px2 * spread, targetY - py2 * spread);
         ctx.closePath();
@@ -2324,11 +2432,11 @@ function drawCraneLightBeams(darkness) {
 
         const beamGrad = ctx.createRadialGradient(
             lightX, lightY, 0,
-            lightX + dx * 0.5, lightY + dy * 0.5, dist * 0.8
+            lightX + dx * 0.5, lightY + dy * 0.5, dist * 0.85
         );
-        beamGrad.addColorStop(0, `rgba(255, 245, 200, ${alpha})`);
-        beamGrad.addColorStop(0.3, `rgba(255, 245, 200, ${alpha * 0.4})`);
-        beamGrad.addColorStop(0.7, `rgba(255, 245, 200, ${alpha * 0.1})`);
+        beamGrad.addColorStop(0, `rgba(255, 250, 220, ${alpha})`);
+        beamGrad.addColorStop(0.2, `rgba(255, 245, 200, ${alpha * 0.6})`);
+        beamGrad.addColorStop(0.5, `rgba(255, 245, 200, ${alpha * 0.25})`);
         beamGrad.addColorStop(1, 'rgba(255, 245, 200, 0)');
         ctx.fillStyle = beamGrad;
         ctx.fillRect(
@@ -2338,6 +2446,39 @@ function drawCraneLightBeams(darkness) {
             Math.abs(dy) + spread * 2
         );
         ctx.restore();
+    }
+}
+
+function drawCraneHeadlampBeams(darkness) {
+    if (darkness <= 0.1) return;
+    const s = PIXEL;
+    const alpha = Math.min(0.2, darkness * 0.3);
+    for (const cr of cranes) {
+        const dir = cr.side === 'left' ? 1 : -1;
+        const lx = (cr.x + dir * 7 - cam.x) * s;
+        const ly = (cr.y - 6 - cam.y) * s;
+        const coneLen = 14 * s;
+        const coneW = 4 * s;
+        const fwdX = dir;
+        const fwdY = 0.4;
+        const len = Math.sqrt(fwdX * fwdX + fwdY * fwdY);
+        const nx = fwdX / len;
+        const ny = fwdY / len;
+        const endX = lx + nx * coneLen;
+        const endY = ly + ny * coneLen;
+        const perpX = -ny;
+        const perpY = nx;
+        const grad = ctx.createLinearGradient(lx, ly, endX, endY);
+        grad.addColorStop(0, `rgba(255, 238, 120, ${alpha})`);
+        grad.addColorStop(0.5, `rgba(255, 238, 120, ${alpha * 0.3})`);
+        grad.addColorStop(1, 'rgba(255, 238, 120, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(lx, ly);
+        ctx.lineTo(endX + perpX * coneW, endY + perpY * coneW);
+        ctx.lineTo(endX - perpX * coneW, endY - perpY * coneW);
+        ctx.closePath();
+        ctx.fill();
     }
 }
 
@@ -2540,10 +2681,11 @@ function drawDarknessWithLights() {
             // Lens glow cutout
             const glowX = (cl.beamX - cam.x) * PIXEL;
             const glowY = (cl.beamY - cam.y) * PIXEL;
-            const glowRad = 14 * PIXEL;
+            const glowRad = 20 * PIXEL;
             const glowGrad = darkCtx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowRad);
             glowGrad.addColorStop(0, `rgba(255,255,255,${cutAlpha})`);
-            glowGrad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.6})`);
+            glowGrad.addColorStop(0.2, `rgba(255,255,255,${cutAlpha * 0.8})`);
+            glowGrad.addColorStop(0.5, `rgba(255,255,255,${cutAlpha * 0.4})`);
             glowGrad.addColorStop(1, 'rgba(255,255,255,0)');
             darkCtx.fillStyle = glowGrad;
             darkCtx.fillRect(glowX - glowRad, glowY - glowRad, glowRad * 2, glowRad * 2);
@@ -2560,23 +2702,23 @@ function drawDarknessWithLights() {
             const ny = dy / dist;
             const px2 = -ny;
             const py2 = nx;
-            const spread = 25 * PIXEL;
+            const spread = 30 * PIXEL;
 
             darkCtx.save();
             darkCtx.beginPath();
-            darkCtx.moveTo(lightX - px2 * 3, lightY - py2 * 3);
-            darkCtx.lineTo(lightX + px2 * 3, lightY + py2 * 3);
+            darkCtx.moveTo(lightX - px2 * 5, lightY - py2 * 5);
+            darkCtx.lineTo(lightX + px2 * 5, lightY + py2 * 5);
             darkCtx.lineTo(targetX + px2 * spread, targetY + py2 * spread);
             darkCtx.lineTo(targetX - px2 * spread, targetY - py2 * spread);
             darkCtx.closePath();
             darkCtx.clip();
             const beamGrad = darkCtx.createRadialGradient(
                 lightX, lightY, 0,
-                lightX + dx * 0.5, lightY + dy * 0.5, dist * 0.8
+                lightX + dx * 0.5, lightY + dy * 0.5, dist * 0.85
             );
             beamGrad.addColorStop(0, `rgba(255,255,255,${cutAlpha})`);
-            beamGrad.addColorStop(0.25, `rgba(255,255,255,${cutAlpha * 0.7})`);
-            beamGrad.addColorStop(0.5, `rgba(255,255,255,${cutAlpha * 0.3})`);
+            beamGrad.addColorStop(0.2, `rgba(255,255,255,${cutAlpha * 0.8})`);
+            beamGrad.addColorStop(0.5, `rgba(255,255,255,${cutAlpha * 0.4})`);
             beamGrad.addColorStop(1, 'rgba(255,255,255,0)');
             darkCtx.fillStyle = beamGrad;
             darkCtx.fillRect(
@@ -2586,6 +2728,24 @@ function drawDarknessWithLights() {
                 Math.abs(dy) + spread * 2
             );
             darkCtx.restore();
+        }
+    }
+
+    // --- Crane headlamp cutouts ---
+    if (darkness > 0.1) {
+        for (const cr of cranes) {
+            const dir = cr.side === 'left' ? 1 : -1;
+            const poolCX = (cr.x + dir * 10 - cam.x) * PIXEL;
+            const poolCY = (cr.y - 3 - cam.y) * PIXEL;
+            const poolR = 10 * PIXEL;
+            const grad = darkCtx.createRadialGradient(poolCX, poolCY, 0, poolCX, poolCY, poolR);
+            grad.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.6})`);
+            grad.addColorStop(0.5, `rgba(255,255,255,${cutAlpha * 0.25})`);
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = grad;
+            darkCtx.beginPath();
+            darkCtx.arc(poolCX, poolCY, poolR, 0, Math.PI * 2);
+            darkCtx.fill();
         }
     }
 
@@ -2761,28 +2921,13 @@ function drawDarknessWithLights() {
         ctx.globalAlpha = 0.35;
         drawHeadlightCones(darkness);
         drawCraneLightBeams(darkness);
+        drawCraneHeadlampBeams(darkness);
         if (truck.state === 'driving' || truck.state === 'fading') {
             drawTruckHeadlights();
         }
         if (policeCar.state !== 'waiting') {
             drawPoliceHeadlights();
-            // Light bar colored glow
-            const pcx = (policeCar.x - cam.x) * PIXEL;
-            const pcy = (policeCar.y - cam.y) * PIXEL;
-            const flashLeft = Math.floor(Date.now() / 300) % 2 === 0;
-            const barR = 10 * PIXEL;
-            // Left bar
-            const lgL = ctx.createRadialGradient(pcx - 1.25 * PIXEL, pcy, 0, pcx - 1.25 * PIXEL, pcy, barR);
-            lgL.addColorStop(0, flashLeft ? `rgba(255,0,0,${darkness * 0.3})` : `rgba(0,80,255,${darkness * 0.3})`);
-            lgL.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = lgL;
-            ctx.fillRect(pcx - 1.25 * PIXEL - barR, pcy - barR, barR * 2, barR * 2);
-            // Right bar
-            const lgR = ctx.createRadialGradient(pcx + 1.25 * PIXEL, pcy, 0, pcx + 1.25 * PIXEL, pcy, barR);
-            lgR.addColorStop(0, flashLeft ? `rgba(0,80,255,${darkness * 0.3})` : `rgba(255,0,0,${darkness * 0.3})`);
-            lgR.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = lgR;
-            ctx.fillRect(pcx + 1.25 * PIXEL - barR, pcy - barR, barR * 2, barR * 2);
+            drawPoliceLightBeams();
         }
         // Work light sodium vapor glow + beams
         drawWorkLightBeams(darkness);
@@ -2794,9 +2939,9 @@ function drawDarknessWithLights() {
             const poolY = ly + 20 * PIXEL;
             const radius = 18 * PIXEL;
             const grad = ctx.createRadialGradient(lx, poolY, 0, lx, poolY, radius);
-            grad.addColorStop(0, `rgba(255, 136, 0, ${darkness * 0.25})`);
-            grad.addColorStop(0.5, `rgba(255, 136, 0, ${darkness * 0.08})`);
-            grad.addColorStop(1, 'rgba(255, 136, 0, 0)');
+            grad.addColorStop(0, `rgba(255, 200, 100, ${darkness * 0.25})`);
+            grad.addColorStop(0.5, `rgba(255, 200, 100, ${darkness * 0.08})`);
+            grad.addColorStop(1, 'rgba(255, 200, 100, 0)');
             ctx.fillStyle = grad;
             ctx.beginPath();
             ctx.arc(lx, poolY, radius, 0, Math.PI * 2);
