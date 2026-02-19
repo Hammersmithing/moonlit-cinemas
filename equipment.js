@@ -3,6 +3,10 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// Offscreen canvas for darkness layer (lights cut holes in it)
+const darkCanvas = document.createElement('canvas');
+const darkCtx = darkCanvas.getContext('2d');
+
 // Pixel scale — render at low res, scale up for 16-bit look
 const PIXEL = 3;
 let W, H, GW, GH; // canvas size and game (logical) size
@@ -12,6 +16,8 @@ function resize() {
     H = window.innerHeight;
     canvas.width = W;
     canvas.height = H;
+    darkCanvas.width = W;
+    darkCanvas.height = H;
     GW = Math.floor(W / PIXEL);
     GH = Math.floor(H / PIXEL);
 }
@@ -146,12 +152,13 @@ const truckWaypoints = [
     { x: CROSS_X, y: CROSS_Y - 250 }                 // drive north and away
 ];
 
-// Lights delivered to each crane (index matches cranes[])
+// Lights delivered to each crane — drop positions match where the hook lands when lowered
+// (boom tip ground projection: boomStartX + dir*35, cable hangs 20px below)
 const craneLights = [
     { placed: false, pickedUp: false,
-      dropX: cranes[0].baseX + 8, dropY: cranes[0].baseY + 5 },
+      dropX: rocket.x - 12, dropY: rocket.y + 15 },
     { placed: false, pickedUp: false,
-      dropX: cranes[1].baseX - 8, dropY: cranes[1].baseY + 5 }
+      dropX: rocket.x + 12, dropY: rocket.y + 15 }
 ];
 
 const workers = {
@@ -160,7 +167,8 @@ const workers = {
     done: false,
     w1x: 0, w1y: 0,
     w2x: 0, w2y: 0,
-    carrying: false
+    carrying: false,
+    dirX: -1, dirY: 0  // facing direction (normalized), default: facing left toward cranes
 };
 
 // ── Car ─────────────────────────────────────────────────────────────
@@ -701,6 +709,7 @@ function update() {
                 // Walk to right crane drop with light
                 const dx = dest1X - truckBackX, dy = dest1Y - truckBackY;
                 const dist = Math.sqrt(dx * dx + dy * dy);
+                w.dirX = dx / dist; w.dirY = dy / dist;
                 w.t += walkSpeed / Math.max(dist, 1);
                 const p = Math.min(w.t, 1);
                 w.w1x = truckBackX + dx * p;
@@ -718,6 +727,7 @@ function update() {
                 // Walk back to truck
                 const dx = truckBackX - dest1X, dy = truckBackY - dest1Y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
+                w.dirX = dx / dist; w.dirY = dy / dist;
                 w.t += walkSpeed / Math.max(dist, 1);
                 const p = Math.min(w.t, 1);
                 w.w1x = dest1X + dx * p;
@@ -728,6 +738,7 @@ function update() {
                 // Walk to left crane drop with light
                 const dx = dest2X - truckBackX, dy = dest2Y - truckBackY;
                 const dist = Math.sqrt(dx * dx + dy * dy);
+                w.dirX = dx / dist; w.dirY = dy / dist;
                 w.t += walkSpeed / Math.max(dist, 1);
                 const p = Math.min(w.t, 1);
                 w.w1x = truckBackX + dx * p;
@@ -745,6 +756,7 @@ function update() {
                 // Walk back to truck
                 const dx = truckBackX - dest2X, dy = truckBackY - dest2Y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
+                w.dirX = dx / dist; w.dirY = dy / dist;
                 w.t += walkSpeed / Math.max(dist, 1);
                 const p = Math.min(w.t, 1);
                 w.w1x = dest2X + dx * p;
@@ -825,7 +837,7 @@ function update() {
         }
     }
 
-    // Animate cranes — state machine: working → pickup → lifting → holding
+    // Animate cranes — state machine: working → lowering → lifting → holding
     for (let ci = 0; ci < cranes.length; ci++) {
         const cr = cranes[ci];
         const cl = craneLights[ci];
@@ -855,23 +867,31 @@ function update() {
                 cr.driveOffset = -pp * 6;
             }
 
-            // Transition to pickup when light is placed
-            if (cl.placed && !cl.pickedUp) {
-                cr.state = 'pickup';
+            // Start lowering preemptively during the truck pause before the walk
+            const headingHere = (ci === 1 && workers.phase >= 0 && workers.phase <= 1 && !cl.placed) ||
+                                (ci === 0 && workers.phase >= 4 && workers.phase <= 5 && !cl.placed);
+            if (headingHere && !cl.placed && !cl.pickedUp) {
+                cr.state = 'lowering';
                 cr.stateT = 0;
+                cr.lowerFrom = cr.boomRaise;
                 cr.driveOffset = 0;
+                cr.boomSwing = 0;
             }
-        } else if (cr.state === 'pickup') {
-            // Lower boom to reach the light on the ground
-            cr.stateT += 0.004;
-            cr.boomSwing = 0;
-            cr.boomRaise = cr.boomRaise * (1 - cr.stateT) + (-0.83) * cr.stateT;
-            cr.driveOffset = 0;
-            if (cr.stateT >= 1) {
+        } else if (cr.state === 'lowering') {
+            // Lower boom at same speed as lifting (0.003) — starts early enough to be ready
+            cr.stateT += 0.003;
+            cr.boomSwing *= 0.95; // smoothly zero out any residual swing
+            cr.driveOffset *= 0.95;
+            const from = cr.lowerFrom || 0;
+            const t = Math.min(cr.stateT, 1);
+            cr.boomRaise = from + (-0.83 - from) * t;
+
+            // Light placed and boom is down — pick it up and start lifting
+            if (cl.placed && !cl.pickedUp && t >= 0.95) {
                 cr.boomRaise = -0.83;
+                cl.pickedUp = true;
                 cr.state = 'lifting';
                 cr.stateT = 0;
-                cl.pickedUp = true;
             }
         } else if (cr.state === 'lifting') {
             // Raise boom with light attached
@@ -1062,43 +1082,8 @@ function draw() {
         if (s.y >= car.y) drawTree(s.x, s.y);
     }
 
-    // Time-of-day lighting
-    const darkness = getDarkness();
-
-    // Darkness overlay with vignette
-    if (darkness > 0) {
-        ctx.fillStyle = `rgba(5, 5, 30, ${darkness})`;
-        ctx.fillRect(0, 0, W, H);
-
-        // Vignette (darker at edges)
-        const vigGrad = ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 0.7);
-        vigGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        vigGrad.addColorStop(1, `rgba(0, 0, 10, ${darkness * 0.4})`);
-        ctx.fillStyle = vigGrad;
-        ctx.fillRect(0, 0, W, H);
-    }
-
-    // Dawn/dusk warm tint
-    const tint = getTimeTint();
-    if (tint) {
-        ctx.fillStyle = `rgba(${tint.r}, ${tint.g}, ${tint.b}, ${tint.a})`;
-        ctx.fillRect(0, 0, W, H);
-    }
-
-    // Headlight cones (when dark)
-    if (darkness > 0.1) {
-        drawHeadlightCones(darkness);
-    }
-
-    // Crane-mounted HMI illumination (when dark and lights are lifted)
-    if (darkness > 0.1) {
-        drawCraneLightBeams(darkness);
-    }
-
-    // Truck headlight beams (when driving away)
-    if (truck.state === 'driving' || truck.state === 'fading') {
-        drawTruckHeadlights();
-    }
+    // Time-of-day lighting with proper darkness cutouts
+    drawDarknessWithLights();
 
     // HUD
     drawHUD();
@@ -1380,56 +1365,22 @@ function drawBillboard(bb, flash) {
         ctx.fill();
     }
 
-    // Billboard spotlights (two point sources when dark)
+    // Billboard spotlight fixtures (dots only; beams handled by darkness cutout system)
     const dark = getDarkness();
     if (dark > 0.1) {
         const lx = (bb.x - cam.x) * PIXEL;
         const ly = (bb.y - bh - cam.y) * PIXEL;
-        const lh = bh * PIXEL;
         const halfW = (bw / 2) * PIXEL;
-        const alpha = Math.min(0.5, dark * 0.7);
-
-        // Two light fixtures (at thirds of sign width)
         const thirdW = halfW * 2 / 3;
         const fixtures = [lx - thirdW / 2, lx + thirdW / 2];
         const flashing = flash && flash.triggered && flash.count < 4;
 
         for (let fi = 0; fi < fixtures.length; fi++) {
             const fx = fixtures[fi];
-
-            // Left fixture (fi=0) flickers during flash sequence
             const isFlashLight = fi === 0 && flashing;
             const lightOn = isFlashLight ? flash.on : true;
-
-            // Fixture dot
             ctx.fillStyle = lightOn ? '#ffee88' : '#333';
             ctx.fillRect(fx - 1.5 * PIXEL, ly - 2 * PIXEL, 3 * PIXEL, 2 * PIXEL);
-
-            if (!lightOn) continue;
-
-            // Triangle beam clipped to billboard face
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(lx - halfW, ly, halfW * 2, lh);
-            ctx.clip();
-
-            ctx.beginPath();
-            ctx.moveTo(fx - 2 * PIXEL, ly);
-            ctx.lineTo(fx + 2 * PIXEL, ly);
-            ctx.lineTo(lx + halfW, ly + lh);
-            ctx.lineTo(lx - halfW, ly + lh);
-            ctx.closePath();
-            ctx.clip();
-
-            const radius = Math.max(lh, halfW) * 1.3;
-            const radGrad = ctx.createRadialGradient(fx, ly, 0, fx, ly + lh * 0.4, radius);
-            radGrad.addColorStop(0, `rgba(255, 240, 160, ${alpha})`);
-            radGrad.addColorStop(0.35, `rgba(255, 240, 160, ${alpha * 0.5})`);
-            radGrad.addColorStop(0.7, `rgba(255, 240, 160, ${alpha * 0.15})`);
-            radGrad.addColorStop(1, 'rgba(255, 240, 160, 0)');
-            ctx.fillStyle = radGrad;
-            ctx.fillRect(lx - halfW, ly, halfW * 2, lh);
-            ctx.restore();
         }
     }
 
@@ -1643,43 +1594,17 @@ function drawSocialBillboard() {
         ctx.fillRect(imgX, imgY, imgW, imgH);
     }
 
-    // Spotlights (two point sources when dark)
+    // Spotlight fixtures (dots only; beams handled by darkness cutout system)
     const dark = getDarkness();
     if (dark > 0.1) {
         const lx = (bx - cam.x) * PIXEL;
         const ly = (by - bh - cam.y) * PIXEL;
-        const lh = bh * PIXEL;
         const halfW = (bw / 2) * PIXEL;
-        const alpha = Math.min(0.5, dark * 0.7);
-
         const thirdW = halfW * 2 / 3;
         const fixtures = [lx - thirdW / 2, lx + thirdW / 2];
         for (const fx of fixtures) {
             ctx.fillStyle = '#ffee88';
             ctx.fillRect(fx - 1.5 * PIXEL, ly - 2 * PIXEL, 3 * PIXEL, 2 * PIXEL);
-
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(lx - halfW, ly, halfW * 2, lh);
-            ctx.clip();
-
-            ctx.beginPath();
-            ctx.moveTo(fx - 2 * PIXEL, ly);
-            ctx.lineTo(fx + 2 * PIXEL, ly);
-            ctx.lineTo(lx + halfW, ly + lh);
-            ctx.lineTo(lx - halfW, ly + lh);
-            ctx.closePath();
-            ctx.clip();
-
-            const radius = Math.max(lh, halfW) * 1.3;
-            const radGrad = ctx.createRadialGradient(fx, ly, 0, fx, ly + lh * 0.4, radius);
-            radGrad.addColorStop(0, `rgba(255, 240, 160, ${alpha})`);
-            radGrad.addColorStop(0.35, `rgba(255, 240, 160, ${alpha * 0.5})`);
-            radGrad.addColorStop(0.7, `rgba(255, 240, 160, ${alpha * 0.15})`);
-            radGrad.addColorStop(1, 'rgba(255, 240, 160, 0)');
-            ctx.fillStyle = radGrad;
-            ctx.fillRect(lx - halfW, ly, halfW * 2, lh);
-            ctx.restore();
         }
     }
 }
@@ -1890,6 +1815,37 @@ function drawHMI(x, y, carried, litUp) {
 function drawWorkerFigure(x, y, walking) {
     // Hard hat
     px(x - 1, y - 6, 3, 2, '#ddaa22');
+    // Headlamp on hard hat (cool white 6500K, visible when dark)
+    const dark = getDarkness();
+    if (dark > 0.1) {
+        px(x, y - 6, 1, 1, '#e8eeff');
+        // Small directional beam in walking direction
+        const hx = (x - cam.x) * PIXEL;
+        const hy = (y - 5 - cam.y) * PIXEL;
+        const w = workers;
+        const beamLen = 3 * PIXEL;
+        const beamSpread = 2 * PIXEL;
+        const alpha = Math.min(0.18, dark * 0.25);
+        const perpX = -w.dirY;
+        const perpY = w.dirX;
+        const tipX = hx + w.dirX * beamLen * PIXEL;
+        const tipY = hy + w.dirY * beamLen * PIXEL;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(tipX + perpX * beamSpread, tipY + perpY * beamSpread);
+        ctx.lineTo(tipX - perpX * beamSpread, tipY - perpY * beamSpread);
+        ctx.closePath();
+        ctx.clip();
+        const beamGrad = ctx.createRadialGradient(hx, hy, 0, hx + w.dirX * beamLen * PIXEL * 0.5, hy + w.dirY * beamLen * PIXEL * 0.5, beamLen * PIXEL);
+        beamGrad.addColorStop(0, `rgba(220, 230, 255, ${alpha})`);
+        beamGrad.addColorStop(0.5, `rgba(220, 230, 255, ${alpha * 0.3})`);
+        beamGrad.addColorStop(1, 'rgba(220, 230, 255, 0)');
+        ctx.fillStyle = beamGrad;
+        ctx.fillRect(Math.min(hx, tipX) - beamSpread, Math.min(hy, tipY) - beamSpread,
+            Math.abs(tipX - hx) + beamSpread * 2, Math.abs(tipY - hy) + beamSpread * 2);
+        ctx.restore();
+    }
     // Head
     px(x, y - 4, 2, 2, '#ddb88c');
     // Body (work vest)
@@ -2023,6 +1979,328 @@ function drawCraneLightBeams(darkness) {
             Math.abs(dx) + spread * 2,
             Math.abs(dy) + spread * 2
         );
+        ctx.restore();
+    }
+}
+
+// ── Darkness + Light Cutout System ───────────────────────────────────
+// Draws darkness on an offscreen canvas, then cuts holes where lights shine.
+// This reveals the original scene underneath instead of just overlaying yellow.
+
+function drawDarknessWithLights() {
+    const darkness = getDarkness();
+
+    // Dawn/dusk warm tint (always applies when active)
+    const tint = getTimeTint();
+    if (tint) {
+        ctx.fillStyle = `rgba(${tint.r}, ${tint.g}, ${tint.b}, ${tint.a})`;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    if (darkness <= 0) return;
+
+    // ── Build darkness layer on offscreen canvas ──
+    darkCtx.clearRect(0, 0, W, H);
+    darkCtx.globalCompositeOperation = 'source-over';
+    darkCtx.globalAlpha = 1;
+    darkCtx.fillStyle = `rgba(5, 5, 30, ${darkness})`;
+    darkCtx.fillRect(0, 0, W, H);
+
+    // Vignette (darker at edges)
+    const vigGrad = darkCtx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 0.7);
+    vigGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vigGrad.addColorStop(1, `rgba(0, 0, 10, ${darkness * 0.4})`);
+    darkCtx.fillStyle = vigGrad;
+    darkCtx.fillRect(0, 0, W, H);
+
+    // ── Cut light holes with destination-out ──
+    // destination-out: result_alpha = dest * (1 - src). Need src ≈ 1.0 for full reveal.
+    darkCtx.globalCompositeOperation = 'destination-out';
+    const cutAlpha = 1.0;
+
+    // --- Car headlights ---
+    if (darkness > 0.1) {
+        const sx = (car.x - cam.x) * PIXEL;
+        const sy = (car.y - cam.y) * PIXEL;
+        const s = PIXEL;
+        darkCtx.save();
+        darkCtx.translate(sx, sy);
+        darkCtx.rotate(car.angle);
+        const coneLen = 55 * s;
+        const coneW = 12 * s;
+        const offsets = [-1.5 * s, 1.5 * s];
+        for (const off of offsets) {
+            const grad = darkCtx.createLinearGradient(5 * s, 0, coneLen, 0);
+            grad.addColorStop(0, `rgba(255,255,255,${cutAlpha})`);
+            grad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.7})`);
+            grad.addColorStop(0.6, `rgba(255,255,255,${cutAlpha * 0.3})`);
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = grad;
+            darkCtx.beginPath();
+            darkCtx.moveTo(5 * s, off);
+            darkCtx.lineTo(coneLen, off - coneW);
+            darkCtx.lineTo(coneLen, off + coneW);
+            darkCtx.closePath();
+            darkCtx.fill();
+        }
+        // Soft glow around car
+        const carGlow = darkCtx.createRadialGradient(0, 0, 0, 0, 0, 22 * s);
+        carGlow.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.6})`);
+        carGlow.addColorStop(0.4, `rgba(255,255,255,${cutAlpha * 0.25})`);
+        carGlow.addColorStop(1, 'rgba(255,255,255,0)');
+        darkCtx.fillStyle = carGlow;
+        darkCtx.fillRect(-18 * s, -18 * s, 36 * s, 36 * s);
+        darkCtx.restore();
+    }
+
+    // --- Billboard spotlights ---
+    if (darkness > 0.1) {
+        const bbW = 62, bbH = 48;
+        for (let i = 0; i < billboards.length; i++) {
+            const bb = billboards[i];
+            const flash = bbFlash[i];
+            const lx = (bb.x - cam.x) * PIXEL;
+            const ly = (bb.y - bbH - cam.y) * PIXEL;
+            const lh = bbH * PIXEL;
+            const halfW = (bbW / 2) * PIXEL;
+            const thirdW = halfW * 2 / 3;
+            const fixtures = [lx - thirdW / 2, lx + thirdW / 2];
+            const flashing = flash && flash.triggered && flash.count < 4;
+
+            for (let fi = 0; fi < fixtures.length; fi++) {
+                const fx = fixtures[fi];
+                const isFlashLight = fi === 0 && flashing;
+                const lightOn = isFlashLight ? flash.on : true;
+                if (!lightOn) continue;
+
+                // Fixture glow (so fixture dots are visible through darkness)
+                const fGlow = darkCtx.createRadialGradient(fx, ly - PIXEL, 0, fx, ly - PIXEL, 8 * PIXEL);
+                fGlow.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.8})`);
+                fGlow.addColorStop(0.4, `rgba(255,255,255,${cutAlpha * 0.3})`);
+                fGlow.addColorStop(1, 'rgba(255,255,255,0)');
+                darkCtx.fillStyle = fGlow;
+                darkCtx.fillRect(fx - 8 * PIXEL, ly - 9 * PIXEL, 16 * PIXEL, 16 * PIXEL);
+
+                // Beam cutout on billboard face
+                darkCtx.save();
+                darkCtx.beginPath();
+                darkCtx.rect(lx - halfW, ly, halfW * 2, lh);
+                darkCtx.clip();
+                darkCtx.beginPath();
+                darkCtx.moveTo(fx - 2 * PIXEL, ly);
+                darkCtx.lineTo(fx + 2 * PIXEL, ly);
+                darkCtx.lineTo(lx + halfW, ly + lh);
+                darkCtx.lineTo(lx - halfW, ly + lh);
+                darkCtx.closePath();
+                darkCtx.clip();
+                const radius = Math.max(lh, halfW) * 1.3;
+                const radGrad = darkCtx.createRadialGradient(fx, ly, 0, fx, ly + lh * 0.4, radius);
+                radGrad.addColorStop(0, `rgba(255,255,255,${cutAlpha})`);
+                radGrad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.6})`);
+                radGrad.addColorStop(0.6, `rgba(255,255,255,${cutAlpha * 0.2})`);
+                radGrad.addColorStop(1, 'rgba(255,255,255,0)');
+                darkCtx.fillStyle = radGrad;
+                darkCtx.fillRect(lx - halfW, ly, halfW * 2, lh);
+                darkCtx.restore();
+            }
+        }
+    }
+
+    // --- Social billboard spotlights ---
+    if (darkness > 0.1) {
+        const sbx = socialBillboard.x, sby = socialBillboard.y;
+        const sbW = 75, sbH = 120;
+        const lx = (sbx - cam.x) * PIXEL;
+        const ly = (sby - sbH - cam.y) * PIXEL;
+        const lh = sbH * PIXEL;
+        const halfW = (sbW / 2) * PIXEL;
+        const thirdW = halfW * 2 / 3;
+        const fixtures = [lx - thirdW / 2, lx + thirdW / 2];
+
+        for (const fx of fixtures) {
+            // Fixture glow
+            const fGlow = darkCtx.createRadialGradient(fx, ly - PIXEL, 0, fx, ly - PIXEL, 8 * PIXEL);
+            fGlow.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.8})`);
+            fGlow.addColorStop(0.4, `rgba(255,255,255,${cutAlpha * 0.3})`);
+            fGlow.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = fGlow;
+            darkCtx.fillRect(fx - 8 * PIXEL, ly - 9 * PIXEL, 16 * PIXEL, 16 * PIXEL);
+
+            // Beam cutout
+            darkCtx.save();
+            darkCtx.beginPath();
+            darkCtx.rect(lx - halfW, ly, halfW * 2, lh);
+            darkCtx.clip();
+            darkCtx.beginPath();
+            darkCtx.moveTo(fx - 2 * PIXEL, ly);
+            darkCtx.lineTo(fx + 2 * PIXEL, ly);
+            darkCtx.lineTo(lx + halfW, ly + lh);
+            darkCtx.lineTo(lx - halfW, ly + lh);
+            darkCtx.closePath();
+            darkCtx.clip();
+            const radius = Math.max(lh, halfW) * 1.3;
+            const radGrad = darkCtx.createRadialGradient(fx, ly, 0, fx, ly + lh * 0.4, radius);
+            radGrad.addColorStop(0, `rgba(255,255,255,${cutAlpha})`);
+            radGrad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.6})`);
+            radGrad.addColorStop(0.6, `rgba(255,255,255,${cutAlpha * 0.2})`);
+            radGrad.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = radGrad;
+            darkCtx.fillRect(lx - halfW, ly, halfW * 2, lh);
+            darkCtx.restore();
+        }
+    }
+
+    // --- Crane HMI beams ---
+    if (darkness > 0.1) {
+        for (let i = 0; i < cranes.length; i++) {
+            const cl = craneLights[i];
+            if (!cl.pickedUp || cranes[i].state !== 'holding') continue;
+
+            // Lens glow cutout
+            const glowX = (cl.beamX - cam.x) * PIXEL;
+            const glowY = (cl.beamY - cam.y) * PIXEL;
+            const glowRad = 14 * PIXEL;
+            const glowGrad = darkCtx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowRad);
+            glowGrad.addColorStop(0, `rgba(255,255,255,${cutAlpha})`);
+            glowGrad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.6})`);
+            glowGrad.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = glowGrad;
+            darkCtx.fillRect(glowX - glowRad, glowY - glowRad, glowRad * 2, glowRad * 2);
+
+            // Beam cone cutout toward rocket
+            const lightX = glowX;
+            const lightY = glowY;
+            const targetX = (rocket.x - cam.x) * PIXEL;
+            const targetY = (rocket.y + 10 - cam.y) * PIXEL;
+            const dx = targetX - lightX;
+            const dy = targetY - lightY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const px2 = -ny;
+            const py2 = nx;
+            const spread = 25 * PIXEL;
+
+            darkCtx.save();
+            darkCtx.beginPath();
+            darkCtx.moveTo(lightX - px2 * 3, lightY - py2 * 3);
+            darkCtx.lineTo(lightX + px2 * 3, lightY + py2 * 3);
+            darkCtx.lineTo(targetX + px2 * spread, targetY + py2 * spread);
+            darkCtx.lineTo(targetX - px2 * spread, targetY - py2 * spread);
+            darkCtx.closePath();
+            darkCtx.clip();
+            const beamGrad = darkCtx.createRadialGradient(
+                lightX, lightY, 0,
+                lightX + dx * 0.5, lightY + dy * 0.5, dist * 0.8
+            );
+            beamGrad.addColorStop(0, `rgba(255,255,255,${cutAlpha})`);
+            beamGrad.addColorStop(0.25, `rgba(255,255,255,${cutAlpha * 0.7})`);
+            beamGrad.addColorStop(0.5, `rgba(255,255,255,${cutAlpha * 0.3})`);
+            beamGrad.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = beamGrad;
+            darkCtx.fillRect(
+                Math.min(lightX, targetX) - spread,
+                Math.min(lightY, targetY) - spread,
+                Math.abs(dx) + spread * 2,
+                Math.abs(dy) + spread * 2
+            );
+            darkCtx.restore();
+        }
+    }
+
+    // --- Truck headlights ---
+    if ((truck.state === 'driving' || truck.state === 'fading') && truck.state !== 'gone') {
+        const tx = (truck.x - cam.x) * PIXEL;
+        const ty = (truck.y - cam.y) * PIXEL;
+        const s = PIXEL;
+        let angle;
+        if (truck.facing === 'right') angle = 0;
+        else if (truck.facing === 'left') angle = Math.PI;
+        else if (truck.facing === 'up') angle = -Math.PI / 2;
+        else angle = Math.PI / 2;
+
+        darkCtx.save();
+        darkCtx.globalAlpha = truck.alpha;
+        darkCtx.translate(tx, ty);
+        darkCtx.rotate(angle);
+        const coneLen = 55 * s;
+        const coneW = 10 * s;
+        const offsets = [-3 * s, 3 * s];
+        for (const off of offsets) {
+            const grad = darkCtx.createLinearGradient(8 * s, 0, 8 * s + coneLen, 0);
+            grad.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.9})`);
+            grad.addColorStop(0.3, `rgba(255,255,255,${cutAlpha * 0.5})`);
+            grad.addColorStop(0.7, `rgba(255,255,255,${cutAlpha * 0.15})`);
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = grad;
+            darkCtx.beginPath();
+            darkCtx.moveTo(8 * s, off);
+            darkCtx.lineTo(8 * s + coneLen, off - coneW);
+            darkCtx.lineTo(8 * s + coneLen, off + coneW);
+            darkCtx.closePath();
+            darkCtx.fill();
+        }
+        darkCtx.restore();
+    }
+
+    // --- Worker headlamps (small directional cones, cool white 6500K) ---
+    const workersVisible = truck.state === 'parked' ||
+        (truck.state === 'loading' && truck.stateT < 60);
+    if (darkness > 0.1 && workersVisible && !workers.done) {
+        const w = workers;
+        const beamLen = 3 * PIXEL;
+        const beamSpread = 2 * PIXEL;
+        const perpX = -w.dirY;
+        const perpY = w.dirX;
+        const positions = [[w.w1x, w.w1y], [w.w2x, w.w2y]];
+        for (const [wx, wy] of positions) {
+            const hx = (wx - cam.x) * PIXEL;
+            const hy = (wy - 5 - cam.y) * PIXEL;
+            const tipX = hx + w.dirX * beamLen * PIXEL;
+            const tipY = hy + w.dirY * beamLen * PIXEL;
+            // Tiny glow at the lamp
+            const dotGlow = darkCtx.createRadialGradient(hx, hy, 0, hx, hy, 3 * PIXEL);
+            dotGlow.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.4})`);
+            dotGlow.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = dotGlow;
+            darkCtx.fillRect(hx - 3 * PIXEL, hy - 3 * PIXEL, 6 * PIXEL, 6 * PIXEL);
+            // Directional cone cutout
+            darkCtx.save();
+            darkCtx.beginPath();
+            darkCtx.moveTo(hx, hy);
+            darkCtx.lineTo(tipX + perpX * beamSpread, tipY + perpY * beamSpread);
+            darkCtx.lineTo(tipX - perpX * beamSpread, tipY - perpY * beamSpread);
+            darkCtx.closePath();
+            darkCtx.clip();
+            const coneGrad = darkCtx.createRadialGradient(hx, hy, 0,
+                hx + w.dirX * beamLen * PIXEL * 0.5, hy + w.dirY * beamLen * PIXEL * 0.5, beamLen * PIXEL);
+            coneGrad.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.6})`);
+            coneGrad.addColorStop(0.4, `rgba(255,255,255,${cutAlpha * 0.2})`);
+            coneGrad.addColorStop(1, 'rgba(255,255,255,0)');
+            darkCtx.fillStyle = coneGrad;
+            darkCtx.fillRect(Math.min(hx, tipX) - beamSpread, Math.min(hy, tipY) - beamSpread,
+                Math.abs(tipX - hx) + beamSpread * 2, Math.abs(tipY - hy) + beamSpread * 2);
+            darkCtx.restore();
+        }
+    }
+
+    // ── Reset and composite ──
+    darkCtx.globalCompositeOperation = 'source-over';
+    darkCtx.globalAlpha = 1;
+
+    // Composite darkness layer (with light holes) onto main canvas
+    ctx.drawImage(darkCanvas, 0, 0);
+
+    // Add subtle warm glow at light sources (lighter blend for color temperature)
+    if (darkness > 0.1) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.35;
+        drawHeadlightCones(darkness);
+        drawCraneLightBeams(darkness);
+        if (truck.state === 'driving' || truck.state === 'fading') {
+            drawTruckHeadlights();
+        }
         ctx.restore();
     }
 }
