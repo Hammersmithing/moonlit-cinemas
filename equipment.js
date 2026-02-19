@@ -916,7 +916,7 @@ function update() {
 
     // Billboard flash triggers — passing one billboard flickers the next (skip index 0)
     for (let i = billboards.length - 1; i > 1; i--) {
-        if (car.y < billboards[i].y && !bbFlash[i - 1].triggered) {
+        if (car.y < billboards[i].y - 70 && !bbFlash[i - 1].triggered) {
             bbFlash[i - 1].triggered = true;
             bbFlash[i - 1].timer = 0;
             bbFlash[i - 1].count = 0;
