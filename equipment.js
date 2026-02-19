@@ -110,7 +110,7 @@ const ZONE_DIST = 120;   // distance from crossroads to trigger zone
 
 const rocket = {
     x: CROSS_X,
-    y: CROSS_Y + START_Y + 60,
+    y: CROSS_Y + START_Y + 120,
     radius: 18
 };
 
@@ -896,16 +896,16 @@ function update() {
         } else if (cr.state === 'lifting') {
             // Raise boom with light attached
             cr.stateT += 0.003;
-            cr.boomRaise = -0.83 + cr.stateT * 1.03; // -0.83 → 0.2
+            cr.boomRaise = -0.83 + cr.stateT * 1.83; // -0.83 → 1.0
             cr.boomSwing = 0;
             cr.driveOffset = 0;
             if (cr.stateT >= 1) {
-                cr.boomRaise = 0.2;
+                cr.boomRaise = 1.0;
                 cr.state = 'holding';
             }
         } else if (cr.state === 'holding') {
             // Hold position with light up
-            cr.boomRaise = 0.2;
+            cr.boomRaise = 1.0;
             cr.boomSwing = 0;
             cr.driveOffset = 0;
         }
@@ -1015,6 +1015,21 @@ function draw() {
         }
     }
 
+    // Dirt work site around rocket and cranes
+    const dirtCX = rocket.x;
+    const dirtCY = rocket.y + 5;
+    const dirtW = 140; // wide enough for both cranes
+    const dirtH = 60;  // tall enough for rocket + pad area
+    px(dirtCX - dirtW / 2, dirtCY - dirtH / 2, dirtW, dirtH, C.dirt);
+    // Subtle variation patches on the dirt
+    for (let dx = dirtCX - dirtW / 2; dx < dirtCX + dirtW / 2; dx += 12) {
+        for (let dy = dirtCY - dirtH / 2; dy < dirtCY + dirtH / 2; dy += 12) {
+            if ((Math.floor(dx / 12) + Math.floor(dy / 12)) % 4 === 0) {
+                px(dx, dy, 12, 12, '#7a6548');
+            }
+        }
+    }
+
     // Draw roads
     drawRoads();
 
@@ -1090,8 +1105,9 @@ function draw() {
 }
 
 function drawRoads() {
-    // Vertical road (extended for longer approach)
-    px(CROSS_X - ROAD_W / 2, CROSS_Y - 200, ROAD_W, START_Y + 250, C.road);
+    // Vertical road (ends at access road T-junction)
+    const roadBottom = ACCESS_CONNECT_Y + ROAD_W / 2;
+    px(CROSS_X - ROAD_W / 2, CROSS_Y - 200, ROAD_W, roadBottom - (CROSS_Y - 200), C.road);
 
     // Horizontal road (left to Lights, right to Grip)
     px(CROSS_X - 200, CROSS_Y - ROAD_W / 2, 400, ROAD_W, C.road);
@@ -1106,7 +1122,7 @@ function drawRoads() {
     px(CROSS_X - hw, ACCESS_CONNECT_Y - hw, ACCESS_EAST - CROSS_X + ROAD_W, ROAD_W, C.road);
 
     // Center line dashes — main vertical (extended)
-    for (let y = CROSS_Y - 200; y < CROSS_Y + START_Y + 50; y += 8) {
+    for (let y = CROSS_Y - 200; y < roadBottom; y += 8) {
         if (Math.abs(y - CROSS_Y) < hw) continue;
         if (Math.abs(y - ACCESS_CONNECT_Y) < hw) continue; // skip access T-junction
         px(CROSS_X - 0.5, y, 1, 4, C.roadLine);
@@ -1135,11 +1151,25 @@ function drawRoads() {
 }
 
 function drawTree(x, y) {
-    // Trunk
-    px(x - 1, y - 2, 3, 5, C.treeTrunk);
-    // Canopy
-    px(x - 4, y - 7, 9, 5, C.tree);
-    px(x - 3, y - 9, 7, 3, C.tree);
+    // Tall palm trunk (slight curve)
+    px(x, y - 2, 2, 5, C.treeTrunk);
+    px(x, y - 7, 2, 5, C.treeTrunk);
+    px(x - 1, y - 12, 2, 5, '#5a3620');
+    px(x - 1, y - 17, 2, 5, '#5a3620');
+    px(x - 1, y - 20, 2, 3, '#4d2e1a');
+    // Coconuts
+    px(x - 1, y - 21, 1, 1, '#6b4226');
+    px(x + 1, y - 21, 1, 1, '#6b4226');
+    // Fronds (drooping fan shape)
+    px(x - 6, y - 22, 5, 2, '#1d5a1d');
+    px(x - 8, y - 20, 4, 2, '#247a24');
+    px(x + 2, y - 22, 5, 2, '#1d5a1d');
+    px(x + 5, y - 20, 4, 2, '#247a24');
+    px(x - 3, y - 24, 7, 2, '#2d6a2d');
+    px(x - 2, y - 26, 5, 2, '#347a34');
+    // Drooping tips
+    px(x - 9, y - 18, 3, 1, '#1d5a1d');
+    px(x + 7, y - 18, 3, 1, '#1d5a1d');
 }
 
 function drawBuilding(x, y, label) {
@@ -2104,6 +2134,29 @@ function drawDarknessWithLights() {
                 darkCtx.restore();
             }
         }
+    }
+
+    // --- Social billboard LED screen (self-illuminated) ---
+    if (darkness > 0) {
+        const sbx = socialBillboard.x, sby = socialBillboard.y;
+        const sbW = 75, sbH = 120;
+        const pad = 4;
+        // Full cutout for the LED screen — it's self-lit
+        const scrX = (sbx - sbW / 2 + pad - cam.x) * PIXEL;
+        const scrY = (sby - sbH + pad - cam.y) * PIXEL;
+        const scrW = (sbW - pad * 2) * PIXEL;
+        const scrH = (sbH - pad * 2) * PIXEL;
+        darkCtx.fillStyle = `rgba(255,255,255,${cutAlpha})`;
+        darkCtx.fillRect(scrX, scrY, scrW, scrH);
+        // Ambient glow spilling from the screen
+        const glowX = (sbx - cam.x) * PIXEL;
+        const glowY = (sby - sbH / 2 - cam.y) * PIXEL;
+        const glowR = Math.max(scrW, scrH) * 0.8;
+        const ambGlow = darkCtx.createRadialGradient(glowX, glowY, scrW * 0.3, glowX, glowY, glowR);
+        ambGlow.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.3})`);
+        ambGlow.addColorStop(1, 'rgba(255,255,255,0)');
+        darkCtx.fillStyle = ambGlow;
+        darkCtx.fillRect(glowX - glowR, glowY - glowR, glowR * 2, glowR * 2);
     }
 
     // --- Social billboard spotlights ---
