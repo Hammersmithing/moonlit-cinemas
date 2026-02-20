@@ -126,7 +126,7 @@ const stage1Show = {
     t: 0,
     on: false,
     strikes: 0,      // how many lightning strikes so far
-    maxStrikes: 5,
+    maxStrikes: 3,
     nextFlash: 0,     // dt until next state change
     done: false
 };
@@ -1086,9 +1086,9 @@ function update(dt) {
             if (stage1Show.on) {
                 // Flash ON — erratic durations: some are single-frame snaps, some linger
                 const roll = Math.random();
-                if (roll < 0.4) stage1Show.nextFlash = 1;           // instant snap
-                else if (roll < 0.7) stage1Show.nextFlash = 2 + Math.random() * 2;  // quick
-                else stage1Show.nextFlash = 4 + Math.random() * 4;  // lingers
+                if (roll < 0.3) stage1Show.nextFlash = 3 + Math.random() * 3;  // quick flash
+                else if (roll < 0.6) stage1Show.nextFlash = 6 + Math.random() * 6;  // medium
+                else stage1Show.nextFlash = 10 + Math.random() * 8;  // lingers
             } else {
                 stage1Show.strikes++;
                 if (stage1Show.strikes >= stage1Show.maxStrikes) {
@@ -1334,14 +1334,15 @@ function drawRoads() {
     const hw = ROAD_W / 2;
     const roadBottom = dirtCY - dirtH / 2;
 
-    // Vertical road
-    px(CROSS_X - hw, CROSS_Y - 200, ROAD_W, roadBottom - (CROSS_Y - 200), C.road);
+    // Vertical road (stops at courthouse steps)
+    const courtSteps = CROSS_Y - ZONE_DIST - 20 + 27 + 6;
+    px(CROSS_X - hw, courtSteps, ROAD_W, roadBottom - courtSteps, C.road);
 
     // Horizontal road (left to Lights, right to Grip)
     px(CROSS_X - 200, CROSS_Y - hw, 400, ROAD_W, C.road);
 
     // Center line dashes — main vertical
-    for (let y = CROSS_Y - 200; y < roadBottom; y += 8) {
+    for (let y = courtSteps; y < roadBottom; y += 8) {
         if (Math.abs(y - CROSS_Y) < hw) continue;
         px(CROSS_X - 0.5, y, 1, 4, C.roadLine);
     }
@@ -1414,9 +1415,9 @@ function drawSoundStage(stage) {
                 // Huge light beam from window
                 const bx = (wx + 2.5 - cam.x) * s;
                 const by = (winY + 4 - cam.y) * s;
-                const beamH = 180 * s;
-                const beamTopW = 3 * s;
-                const beamBotW = 28 * s;
+                const beamH = 90 * s;
+                const beamTopW = 2 * s;
+                const beamBotW = 14 * s;
                 const grad = ctx.createLinearGradient(bx, by, bx, by + beamH);
                 grad.addColorStop(0, 'rgba(255,255,240,0.7)');
                 grad.addColorStop(0.15, 'rgba(255,255,230,0.4)');
@@ -1952,6 +1953,16 @@ function drawCar() {
     // Hood (front darker)
     ctx.fillStyle = C.carDark;
     ctx.fillRect(-3 * s, -5 * s, 6 * s, 3 * s);
+
+    // Night illumination — warm light on body
+    const dark = getDarkness();
+    if (dark > 0.1) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `rgba(160,60,40,${dark * 0.8})`;
+        ctx.fillRect(-3 * s, -5 * s, 6 * s, 10 * s);
+        ctx.restore();
+    }
 
     // Windshield
     ctx.fillStyle = C.carWindow;
@@ -2815,13 +2826,17 @@ function drawDarknessWithLights() {
             darkCtx.closePath();
             darkCtx.fill();
         }
-        // Soft glow around car
-        const carGlow = darkCtx.createRadialGradient(0, 0, 0, 0, 0, 22 * s);
-        carGlow.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.6})`);
-        carGlow.addColorStop(0.4, `rgba(255,255,255,${cutAlpha * 0.25})`);
-        carGlow.addColorStop(1, 'rgba(255,255,255,0)');
-        darkCtx.fillStyle = carGlow;
-        darkCtx.fillRect(-18 * s, -18 * s, 36 * s, 36 * s);
+        // Car body glow cutout — partial reveal so car stays visible
+        darkCtx.rotate(-car.angle); // undo rotation, stay translated
+        darkCtx.rotate(car.angle + Math.PI / 2); // align to car sprite
+        const bodyGlow = darkCtx.createRadialGradient(0, 0, 0, 0, 0, 8 * s);
+        bodyGlow.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.5})`);
+        bodyGlow.addColorStop(0.6, `rgba(255,255,255,${cutAlpha * 0.25})`);
+        bodyGlow.addColorStop(1, 'rgba(255,255,255,0)');
+        darkCtx.fillStyle = bodyGlow;
+        darkCtx.beginPath();
+        darkCtx.arc(0, 0, 8 * s, 0, Math.PI * 2);
+        darkCtx.fill();
         darkCtx.restore();
     }
 
