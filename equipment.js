@@ -1115,20 +1115,20 @@ function update(dt) {
             break;
         }
     }
-    // Stage 1 → grip inventory
+    // Stage 1 → grip inventory (must be inside the doorway)
     const s1 = soundStages[0];
     const s1dx = car.x - s1.x;
-    const s1dy = car.y - (s1.y + 25);
-    if (Math.sqrt(s1dx * s1dx + s1dy * s1dy) < 18) {
+    const s1dy = car.y - (s1.y + 15);
+    if (Math.abs(s1dx) < 12 && Math.abs(s1dy) < 10) {
         arrived = 'right';
         running = false;
         showInventory('right');
     }
-    // Stage 2 → lights inventory
+    // Stage 2 → lights inventory (must be inside the doorway)
     const s2 = soundStages[1];
     const s2dx = car.x - s2.x;
-    const s2dy = car.y - (s2.y + 25);
-    if (Math.sqrt(s2dx * s2dx + s2dy * s2dy) < 18) {
+    const s2dy = car.y - (s2.y + 15);
+    if (Math.abs(s2dx) < 12 && Math.abs(s2dy) < 10) {
         arrived = 'left';
         running = false;
         showInventory('left');
@@ -1723,8 +1723,6 @@ function drawRocket() {
     px(rx - 7, ry, 3, 5, '#cc3333');
     px(rx + 4, ry, 3, 5, '#cc3333');
 
-    // Label
-    pxText('BACK TO SPACE', rx, ry + 13, '#ffffff', 13);
 }
 
 function drawCrane(idx) {
@@ -2037,6 +2035,8 @@ function drawHUD() {
     const hint = isTouchDevice ? 'Use the joystick to drive' : 'WASD or Arrow Keys to drive';
     ctx.fillText(hint, W / 2, H - 20);
 
+    // "BACK TO SPACE" label above rocket — always on top
+    pxText('BACK TO SPACE', rocket.x, rocket.y + 13, '#ffffff', 13);
 }
 
 // ── Inventory Overlay ───────────────────────────────────────────────
