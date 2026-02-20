@@ -107,6 +107,7 @@ const CROSS_Y = 0;       // crossroads Y center
 const CROSS_X = 0;       // crossroads X center
 const START_Y = 400;     // car start offset below crossroads (longer approach)
 const ZONE_DIST = 120;   // distance from crossroads to trigger zone
+const BORDER = { left: -240, right: 240, top: -240, bottom: START_Y + 300 };
 
 // ── Sand Lot (left of north-south road) ─────────────────────────────
 
@@ -720,6 +721,12 @@ function update(dt) {
     car.x += Math.cos(car.angle) * car.speed * dt;
     car.y += Math.sin(car.angle) * car.speed * dt;
 
+    // City border — clamp car position
+    if (car.x < BORDER.left)  { car.x = BORDER.left;  car.speed *= 0.3; }
+    if (car.x > BORDER.right) { car.x = BORDER.right;  car.speed *= 0.3; }
+    if (car.y < BORDER.top)   { car.y = BORDER.top;    car.speed *= 0.3; }
+    if (car.y > BORDER.bottom){ car.y = BORDER.bottom;  car.speed *= 0.3; }
+
     // Camera smoothly follows car
     cam.x += (car.x - GW / 2 - cam.x) * (1 - Math.pow(1 - 0.08, dt));
     cam.y += (car.y - GH / 2 - cam.y) * (1 - Math.pow(1 - 0.08, dt));
@@ -1220,6 +1227,9 @@ function draw() {
         }
     }
 
+    // Studio lot perimeter fence
+    drawFence();
+
     // Draw roads
     drawRoads();
 
@@ -1572,6 +1582,43 @@ function drawBuilding(x, y, label) {
 
     // Label on entablature
     pxText(label, x, y - bh / 2 + 3, '#4a3a2a', 10);
+}
+
+function drawFence() {
+    const L = BORDER.left, R = BORDER.right, T = BORDER.top, B = BORDER.bottom;
+    const postSpacing = 16;
+    const postColor = '#8a7a5a';
+    const railColor = '#a09070';
+    const wireColor = '#888';
+
+    // Draw fence segments — top, bottom, left, right
+    // Top edge
+    for (let x = L; x <= R; x += postSpacing) {
+        px(x, T - 2, 2, 5, postColor);  // post
+    }
+    px(L, T - 1, R - L, 1, railColor);  // top rail
+    px(L, T + 1, R - L, 1, wireColor);  // wire
+
+    // Bottom edge
+    for (let x = L; x <= R; x += postSpacing) {
+        px(x, B - 2, 2, 5, postColor);
+    }
+    px(L, B - 1, R - L, 1, railColor);
+    px(L, B + 1, R - L, 1, wireColor);
+
+    // Left edge
+    for (let y = T; y <= B; y += postSpacing) {
+        px(L - 1, y, 4, 2, postColor);
+    }
+    px(L, T, 1, B - T, railColor);
+    px(L + 1, T, 1, B - T, wireColor);
+
+    // Right edge
+    for (let y = T; y <= B; y += postSpacing) {
+        px(R - 1, y, 4, 2, postColor);
+    }
+    px(R, T, 1, B - T, railColor);
+    px(R + 1, T, 1, B - T, wireColor);
 }
 
 function drawStreetLamp(x, y) {
