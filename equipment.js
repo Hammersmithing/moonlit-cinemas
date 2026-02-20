@@ -119,6 +119,17 @@ const sandLot = {
 
 // ── Sound Stages on sand lot ────────────────────────────────────────
 
+// Stage 1 filming light show — lightning flash triggered on first pass
+const stage1Show = {
+    triggered: false,
+    t: 0,
+    on: false,
+    strikes: 0,      // how many lightning strikes so far
+    maxStrikes: 5,
+    nextFlash: 0,     // dt until next state change
+    done: false
+};
+
 const soundStages = [
     { x: sandLot.x + sandLot.w - 45, y: sandLot.y + 35, label: 'STAGE 1' },
     { x: sandLot.x + sandLot.w - 145, y: sandLot.y + 35, label: 'STAGE 2',
@@ -162,10 +173,8 @@ const truck = {
 
 const stage2 = { x: sandLot.x + sandLot.w - 145, y: sandLot.y + 35 };
 const truckWaypoints = [
-    { x: truck.startX, y: rocket.y + 40 },             // drive south to clear dirt area
-    { x: ROAD_W / 2 + 15, y: rocket.y + 40 },         // drive east past rocket (right side)
-    { x: ROAD_W / 2 + 15, y: rocket.y - 30 },         // drive north past dirt area
-    { x: CROSS_X, y: rocket.y - 30 },                  // merge onto road
+    { x: truck.startX, y: rocket.y - 30 },             // drive north past dirt area
+    { x: CROSS_X, y: rocket.y - 30 },                  // drive east to road
     { x: CROSS_X, y: stage2.y + 25 + 20 },             // drive north past Stage 2 door level
     { x: stage2.x, y: stage2.y + 25 + 20 },           // drive west to Stage 2 entrance
     { x: stage2.x, y: stage2.y + 25 + 5 }             // drive north to door
@@ -747,8 +756,8 @@ function update(dt) {
             const walkSpeed = 0.25; // game pixels per frame
 
             if (w.phase === 0 || w.phase === 4) {
-                // Pause at truck
-                w.t += 0.005 * dt;
+                // Brief pause at truck then go
+                w.t = 1;
                 w.w1x = truckBackX; w.w1y = truckBackY;
                 w.w2x = truckBackX; w.w2y = truckBackY + 5;
                 w.carrying = false;
@@ -866,7 +875,7 @@ function update(dt) {
             truck.y = wp.y;
             truck.waypointIdx++;
             // Open doors early when truck turns toward stage
-            if (truck.waypointIdx === 5 && soundStages[1].doorState === 'closed') {
+            if (truck.waypointIdx === 3 && soundStages[1].doorState === 'closed') {
                 soundStages[1].doorState = 'opening';
             }
             if (truck.waypointIdx >= truckWaypoints.length) {
@@ -911,7 +920,7 @@ function update(dt) {
     // Police car state machine
     if (policeCar.state === 'waiting') {
         policeCar.stateT += dt;
-        if (policeCar.stateT >= 600) {
+        if (policeCar.stateT >= 1800) {
             policeCar.state = 'driving';
             policeCar.stateT = 0;
             policeCar.waypointIdx = 0;
@@ -980,7 +989,8 @@ function update(dt) {
             if (headingHere && !cl.placed && !cl.pickedUp) {
                 cr.state = 'lowering';
                 cr.stateT = 0;
-                cr.lowerFrom = cr.boomRaise;
+                cr.lowerFrom = 0;
+                cr.boomRaise = 0;
                 cr.driveOffset = 0;
                 cr.boomSwing = 0;
             }
@@ -1021,14 +1031,12 @@ function update(dt) {
         cr.y = cr.baseY - cr.driveOffset;
     }
 
-    // Billboard flash triggers — passing one billboard flickers the next (skip index 0)
-    for (let i = billboards.length - 1; i > 1; i--) {
-        if (car.y < billboards[i].y - 70 && !bbFlash[i - 1].triggered) {
-            bbFlash[i - 1].triggered = true;
-            bbFlash[i - 1].timer = 0;
-            bbFlash[i - 1].count = 0;
-            bbFlash[i - 1].on = false;
-        }
+    // Billboard flash trigger — bad bulb on EQUIPMENT sign (index 2) as you pass it
+    if (car.y < billboards[2].y + 100 && !bbFlash[2].triggered) {
+        bbFlash[2].triggered = true;
+        bbFlash[2].timer = 0;
+        bbFlash[2].count = 0;
+        bbFlash[2].on = false;
     }
     for (const f of bbFlash) {
         if (f.triggered && f.count < 4) {
@@ -1039,6 +1047,45 @@ function update(dt) {
                 f.timer = 0;
                 f.on = !f.on;
                 if (!f.on) f.count++;
+            }
+        }
+    }
+
+    // Stage 1 light show trigger — momentary flash on first pass
+    if (!stage1Show.triggered) {
+        const s1 = soundStages[0];
+        const dx = car.x - s1.x;
+        const dy = car.y - s1.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 120) {
+            stage1Show.triggered = true;
+            stage1Show.t = 0;
+            stage1Show.strikes = 0;
+            stage1Show.on = true;
+            stage1Show.nextFlash = 2 + Math.random() * 2;  // first strike starts immediately
+        }
+    }
+    if (stage1Show.triggered && !stage1Show.done) {
+        stage1Show.t += dt;
+        if (stage1Show.t >= stage1Show.nextFlash) {
+            stage1Show.t = 0;
+            stage1Show.on = !stage1Show.on;
+            if (stage1Show.on) {
+                // Flash ON — erratic durations: some are single-frame snaps, some linger
+                const roll = Math.random();
+                if (roll < 0.4) stage1Show.nextFlash = 1;           // instant snap
+                else if (roll < 0.7) stage1Show.nextFlash = 2 + Math.random() * 2;  // quick
+                else stage1Show.nextFlash = 4 + Math.random() * 4;  // lingers
+            } else {
+                stage1Show.strikes++;
+                if (stage1Show.strikes >= stage1Show.maxStrikes) {
+                    stage1Show.done = true;
+                } else {
+                    // Chaotic gaps — sometimes rapid double-strike, sometimes long pause
+                    const roll = Math.random();
+                    if (roll < 0.3) stage1Show.nextFlash = 1 + Math.random() * 2;   // rapid re-strike
+                    else if (roll < 0.6) stage1Show.nextFlash = 6 + Math.random() * 10; // medium
+                    else stage1Show.nextFlash = 15 + Math.random() * 20;  // long dark pause
+                }
             }
         }
     }
@@ -1135,11 +1182,15 @@ function draw() {
 
     // Dirt work site around rocket and cranes
     px(dirtCX - dirtW / 2, dirtCY - dirtH / 2, dirtW, dirtH, C.dirt);
-    // Subtle variation patches on the dirt
-    for (let dx = dirtCX - dirtW / 2; dx < dirtCX + dirtW / 2; dx += 12) {
-        for (let dy = dirtCY - dirtH / 2; dy < dirtCY + dirtH / 2; dy += 12) {
+    // Subtle variation patches on the dirt (clamped to boundary)
+    const dirtL = dirtCX - dirtW / 2, dirtR = dirtCX + dirtW / 2;
+    const dirtT = dirtCY - dirtH / 2, dirtB = dirtCY + dirtH / 2;
+    for (let dx = dirtL; dx < dirtR; dx += 12) {
+        for (let dy = dirtT; dy < dirtB; dy += 12) {
             if ((Math.floor(dx / 12) + Math.floor(dy / 12)) % 4 === 0) {
-                px(dx, dy, 12, 12, '#7a6548');
+                const pw = Math.min(12, dirtR - dx);
+                const ph = Math.min(12, dirtB - dy);
+                px(dx, dy, pw, ph, '#7a6548');
             }
         }
     }
@@ -1316,8 +1367,62 @@ function drawSoundStage(stage) {
     }
 
     // Small windows along top
-    for (let wx = x - bw / 2 + 8; wx < x + bw / 2 - 8; wx += 12) {
-        px(wx, y - bh / 2 + 4, 5, 4, '#8899aa');
+    const filming = stage.label === 'STAGE 1';
+    const winY = y - bh / 2 + 4;
+    const s = PIXEL;
+
+    if (filming && stage1Show.triggered) {
+        const bright = stage1Show.on ? 1.0 : 0;
+        for (let wx = x - bw / 2 + 8; wx < x + bw / 2 - 8; wx += 12) {
+            if (bright > 0) {
+                px(wx, winY, 5, 4, '#ffffff');
+                // Huge light beam from window
+                const bx = (wx + 2.5 - cam.x) * s;
+                const by = (winY + 4 - cam.y) * s;
+                const beamH = 180 * s;
+                const beamTopW = 3 * s;
+                const beamBotW = 28 * s;
+                const grad = ctx.createLinearGradient(bx, by, bx, by + beamH);
+                grad.addColorStop(0, 'rgba(255,255,240,0.7)');
+                grad.addColorStop(0.15, 'rgba(255,255,230,0.4)');
+                grad.addColorStop(0.5, 'rgba(255,255,220,0.14)');
+                grad.addColorStop(1, 'rgba(255,255,220,0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(bx - beamTopW, by);
+                ctx.lineTo(bx + beamTopW, by);
+                ctx.lineTo(bx + beamBotW, by + beamH);
+                ctx.lineTo(bx - beamBotW, by + beamH);
+                ctx.closePath();
+                ctx.fill();
+                // Core beam
+                const coreH = beamH * 0.6;
+                const coreW = beamBotW * 0.3;
+                const coreGrad = ctx.createLinearGradient(bx, by, bx, by + coreH);
+                coreGrad.addColorStop(0, 'rgba(255,255,255,0.5)');
+                coreGrad.addColorStop(0.4, 'rgba(255,255,240,0.15)');
+                coreGrad.addColorStop(1, 'rgba(255,255,240,0)');
+                ctx.fillStyle = coreGrad;
+                ctx.beginPath();
+                ctx.moveTo(bx - 1 * s, by);
+                ctx.lineTo(bx + 1 * s, by);
+                ctx.lineTo(bx + coreW, by + coreH);
+                ctx.lineTo(bx - coreW, by + coreH);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                px(wx, winY, 5, 4, '#667788');
+            }
+        }
+    } else if (filming) {
+        // Before trigger — dark windows
+        for (let wx = x - bw / 2 + 8; wx < x + bw / 2 - 8; wx += 12) {
+            px(wx, winY, 5, 4, '#667788');
+        }
+    } else {
+        for (let wx = x - bw / 2 + 8; wx < x + bw / 2 - 8; wx += 12) {
+            px(wx, winY, 5, 4, '#8899aa');
+        }
     }
 
     // Stage number label
@@ -1330,9 +1435,7 @@ function drawSoundStage(stage) {
 
     // Doors (on top of everything — slide over the wall)
     if (doorOpen < 1) {
-        // Left door slides left
         px(x - doorW - slideOffset, doorY, doorW, doorH, '#555566');
-        // Right door slides right
         px(x + slideOffset, doorY, doorW, doorH, '#555566');
     }
 
@@ -1341,9 +1444,38 @@ function drawSoundStage(stage) {
         px(x, doorY, 1, doorH, '#3a3a48');
     }
 
-    // Red light above door
-    const redOn = stage.doorState === 'closed';
-    px(x, doorY - 3, 2, 2, redOn ? '#ff2222' : '#cc3333');
+    // Red recording light — always on for Stage 1, illuminates like headlights
+    if (filming) {
+        px(x - 1, doorY - 4, 3, 3, '#ff1111');
+        // Red glow (small)
+        const rlx = (x + 0.5 - cam.x) * s;
+        const rly = (doorY - 2.5 - cam.y) * s;
+        const glowR = 8 * s;
+        const glow = ctx.createRadialGradient(rlx, rly, 0, rlx, rly, glowR);
+        glow.addColorStop(0, 'rgba(255,20,20,0.5)');
+        glow.addColorStop(0.4, 'rgba(255,20,20,0.15)');
+        glow.addColorStop(1, 'rgba(255,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(rlx, rly, glowR, 0, Math.PI * 2);
+        ctx.fill();
+        // Red illumination pool on ground (like headlights)
+        const poolX = (x + 0.5 - cam.x) * s;
+        const poolY = (doorY + 10 - cam.y) * s;
+        const poolR = 25 * s;
+        const pool = ctx.createRadialGradient(poolX, poolY, 0, poolX, poolY, poolR);
+        pool.addColorStop(0, 'rgba(255,30,30,0.18)');
+        pool.addColorStop(0.3, 'rgba(255,20,20,0.08)');
+        pool.addColorStop(0.6, 'rgba(255,10,10,0.03)');
+        pool.addColorStop(1, 'rgba(255,0,0,0)');
+        ctx.fillStyle = pool;
+        ctx.beginPath();
+        ctx.arc(poolX, poolY, poolR, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        const redOn = stage.doorState === 'closed';
+        px(x, doorY - 3, 2, 2, redOn ? '#ff2222' : '#cc3333');
+    }
 }
 
 function drawBuilding(x, y, label) {
@@ -1581,12 +1713,12 @@ function drawCrane(idx) {
 }
 
 function drawBillboard(bb, flash) {
-    const bw = 62;  // billboard width
-    const bh = 48;  // billboard height
+    const bw = 46;  // billboard width
+    const bh = 36;  // billboard height
 
     // Posts (two legs)
-    px(bb.x - 8, bb.y, 3, 12, C.sign);
-    px(bb.x + 6, bb.y, 3, 12, C.sign);
+    px(bb.x - 6, bb.y, 2, 10, C.sign);
+    px(bb.x + 5, bb.y, 2, 10, C.sign);
 
     // Board background
     px(bb.x - bw / 2, bb.y - bh, bw, bh, '#111a11');
@@ -1597,51 +1729,44 @@ function drawBillboard(bb, flash) {
     px(bb.x + bw / 2 - 2, bb.y - bh, 2, bh, '#667744');
 
     // Direction text with inline arrow
-    // Measure text to position arrow next to it
-    ctx.font = 'bold 13px "Courier New", monospace';
+    ctx.font = 'bold 10px "Courier New", monospace';
     const dirText = bb.direction;
     const dirW = ctx.measureText(dirText).width / PIXEL;
-    const lineY = bb.y - bh + 12;
+    const lineY = bb.y - bh + 8;
     const lineCX = (bb.x - cam.x) * PIXEL;
 
     const ay = (lineY - cam.y) * PIXEL;
-    const as = 4 * PIXEL;
+    const as = 3 * PIXEL;
     ctx.fillStyle = C.arrow;
-    const shaft = as * 0.3; // shaft thickness
+    const shaft = as * 0.3;
 
-    if (bb.arrow === '\u2192') { // right — arrow on right side of text
-        pxText(dirText, bb.x - 4, lineY, C.arrow, 13);
+    if (bb.arrow === '\u2192') { // right
+        pxText(dirText, bb.x - 3, lineY, C.arrow, 10);
         const textRight = lineCX + (dirW / 2) * PIXEL;
-        const ax = textRight + 6 * PIXEL;
-        // Shaft
+        const ax = textRight + 4 * PIXEL;
         ctx.fillRect(ax - as * 1.35, ay - shaft, as * 1.35, shaft * 2);
-        // Triangle head
         ctx.beginPath();
         ctx.moveTo(ax + as * 0.75, ay);
         ctx.lineTo(ax - as * 0.25, ay - as * 0.75);
         ctx.lineTo(ax - as * 0.25, ay + as * 0.75);
         ctx.closePath();
         ctx.fill();
-    } else if (bb.arrow === '\u2190') { // left — arrow on left side of text
-        pxText(dirText, bb.x + 4, lineY, C.arrow, 13);
+    } else if (bb.arrow === '\u2190') { // left
+        pxText(dirText, bb.x + 3, lineY, C.arrow, 10);
         const textLeft = lineCX - (dirW / 2) * PIXEL;
-        const ax = textLeft - 6 * PIXEL;
-        // Shaft
+        const ax = textLeft - 4 * PIXEL;
         ctx.fillRect(ax, ay - shaft, as * 1.35, shaft * 2);
-        // Triangle head
         ctx.beginPath();
         ctx.moveTo(ax - as * 0.75, ay);
         ctx.lineTo(ax + as * 0.25, ay - as * 0.75);
         ctx.lineTo(ax + as * 0.25, ay + as * 0.75);
         ctx.closePath();
         ctx.fill();
-    } else { // up — arrow left of text
-        pxText(dirText, bb.x + 4, lineY, C.arrow, 13);
+    } else { // up
+        pxText(dirText, bb.x + 3, lineY, C.arrow, 10);
         const textLeft = lineCX - (dirW / 2) * PIXEL;
-        const ax = textLeft - 6 * PIXEL;
-        // Shaft
+        const ax = textLeft - 4 * PIXEL;
         ctx.fillRect(ax - shaft, ay, shaft * 2, as * 1.35);
-        // Triangle head
         ctx.beginPath();
         ctx.moveTo(ax, ay - as * 0.75);
         ctx.lineTo(ax - as * 0.75, ay + as * 0.25);
@@ -1650,7 +1775,7 @@ function drawBillboard(bb, flash) {
         ctx.fill();
     }
 
-    // Billboard spotlight fixtures (dots only; beams handled by darkness cutout system)
+    // Billboard spotlight fixtures
     const dark = getDarkness();
     if (dark > 0.1) {
         const lx = (bb.x - cam.x) * PIXEL;
@@ -1662,17 +1787,15 @@ function drawBillboard(bb, flash) {
 
         for (let fi = 0; fi < fixtures.length; fi++) {
             const fx = fixtures[fi];
-            const isFlashLight = fi === 0 && flashing;
+            const isFlashLight = fi === 1 && flashing;
             const lightOn = isFlashLight ? flash.on : true;
             ctx.fillStyle = lightOn ? '#ffee88' : '#333';
             ctx.fillRect(fx - 1.5 * PIXEL, ly - 2 * PIXEL, 3 * PIXEL, 2 * PIXEL);
         }
     }
 
-    // Label (middle, big)
-    pxText(bb.label, bb.x, bb.y - bh + 26, C.white, 17);
-    // Sublabel (bottom)
-    pxText(bb.sublabel, bb.x, bb.y - bh + 40, '#ccddbb', 13);
+    // Label
+    pxText(bb.label, bb.x, bb.y - bh + 22, C.white, 13);
 }
 
 function drawCar() {
@@ -1816,7 +1939,8 @@ invBackBtn.addEventListener('click', () => {
     car.angle = -Math.PI / 2;
     arrived = null;
     running = true;
-    loop();
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
 });
 
 // ── Social Billboard Drawing & Overlay ──────────────────────────────
@@ -2224,9 +2348,9 @@ function drawPoliceCarDown() {
     px(cx - 3, cy - 6, 6, 3, '#446688');
     // Front windshield (bottom)
     px(cx - 3, cy + 4, 6, 2, '#446688');
-    // Light bar
-    px(cx - 3, cy - 2, 2.5, 2, flashLeft ? '#ff0000' : '#0044ff');
-    px(cx + 0.5, cy - 2, 2.5, 2, flashLeft ? '#0044ff' : '#ff0000');
+    // Light bar (centered on roof)
+    px(cx - 2, cy - 2, 2, 2, flashLeft ? '#ff0000' : '#0044ff');
+    px(cx, cy - 2, 2, 2, flashLeft ? '#0044ff' : '#ff0000');
     drawPoliceCarLightBar(cx, cy - 1);
     // Headlights (bottom = front)
     px(cx - 3, cy + 7.5, 2, 1.5, '#ffee88');
@@ -2258,9 +2382,9 @@ function drawPoliceCarRight() {
     px(cx - 6, cy - 3, 3, 6, '#446688');
     // Front windshield (right)
     px(cx + 4, cy - 3, 2, 6, '#446688');
-    // Light bar
-    px(cx - 2, cy - 5, 2.5, 2, flashLeft ? '#ff0000' : '#0044ff');
-    px(cx + 0.5, cy - 5, 2.5, 2, flashLeft ? '#0044ff' : '#ff0000');
+    // Light bar (centered on roof)
+    px(cx - 2, cy - 5, 2, 2, flashLeft ? '#ff0000' : '#0044ff');
+    px(cx, cy - 5, 2, 2, flashLeft ? '#0044ff' : '#ff0000');
     drawPoliceCarLightBar(cx, cy - 4);
     // Headlights (right = front)
     px(cx + 7.5, cy - 2, 1.5, 2, '#ffee88');
@@ -2292,9 +2416,9 @@ function drawPoliceCarLeft() {
     px(cx + 3, cy - 3, 3, 6, '#446688');
     // Front windshield (left)
     px(cx - 6, cy - 3, 2, 6, '#446688');
-    // Light bar
-    px(cx - 3, cy - 5, 2.5, 2, flashLeft ? '#ff0000' : '#0044ff');
-    px(cx + 0.5, cy - 5, 2.5, 2, flashLeft ? '#0044ff' : '#ff0000');
+    // Light bar (centered on roof)
+    px(cx - 2, cy - 5, 2, 2, flashLeft ? '#ff0000' : '#0044ff');
+    px(cx, cy - 5, 2, 2, flashLeft ? '#0044ff' : '#ff0000');
     drawPoliceCarLightBar(cx, cy - 4);
     // Headlights (left = front)
     px(cx - 9, cy - 2, 1.5, 2, '#ffee88');
@@ -2554,7 +2678,7 @@ function drawDarknessWithLights() {
 
     // --- Billboard spotlights ---
     if (darkness > 0.1) {
-        const bbW = 62, bbH = 48;
+        const bbW = 46, bbH = 36;
         for (let i = 0; i < billboards.length; i++) {
             const bb = billboards[i];
             const flash = bbFlash[i];
@@ -2568,7 +2692,7 @@ function drawDarknessWithLights() {
 
             for (let fi = 0; fi < fixtures.length; fi++) {
                 const fx = fixtures[fi];
-                const isFlashLight = fi === 0 && flashing;
+                const isFlashLight = fi === 1 && flashing;
                 const lightOn = isFlashLight ? flash.on : true;
                 if (!lightOn) continue;
 
@@ -2728,6 +2852,38 @@ function drawDarknessWithLights() {
                 Math.abs(dy) + spread * 2
             );
             darkCtx.restore();
+        }
+    }
+
+    // --- Stage 1 red light + window cutouts ---
+    if (stage1Show.triggered) {
+        const s1 = soundStages[0];
+        const rlx = (s1.x + 0.5 - cam.x) * PIXEL;
+        const rly = (s1.y + 25 - 2.5 - cam.y) * PIXEL;
+        const redR = 20 * PIXEL;
+        const rGrad = darkCtx.createRadialGradient(rlx, rly, 0, rlx, rly, redR);
+        rGrad.addColorStop(0, `rgba(255,255,255,${cutAlpha * 0.6})`);
+        rGrad.addColorStop(0.4, `rgba(255,255,255,${cutAlpha * 0.2})`);
+        rGrad.addColorStop(1, 'rgba(255,255,255,0)');
+        darkCtx.fillStyle = rGrad;
+        darkCtx.beginPath();
+        darkCtx.arc(rlx, rly, redR, 0, Math.PI * 2);
+        darkCtx.fill();
+
+        // Window light cutouts — all in unison, on/off
+        if (stage1Show.on) {
+            const winCutY = (s1.y - 25 + 8 - cam.y) * PIXEL;
+            for (let wx = s1.x - 40 + 8; wx < s1.x + 40 - 8; wx += 12) {
+                const wcx = (wx + 2.5 - cam.x) * PIXEL;
+                const wR = 80 * PIXEL;
+                const cutStr = cutAlpha * 0.7;
+                const wGrad = darkCtx.createRadialGradient(wcx, winCutY, 0, wcx, winCutY + wR * 0.6, wR);
+                wGrad.addColorStop(0, `rgba(255,255,255,${cutStr})`);
+                wGrad.addColorStop(0.3, `rgba(255,255,255,${cutStr * 0.4})`);
+                wGrad.addColorStop(1, 'rgba(255,255,255,0)');
+                darkCtx.fillStyle = wGrad;
+                darkCtx.fillRect(wcx - wR, winCutY, wR * 2, wR * 1.5);
+            }
         }
     }
 
