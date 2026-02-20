@@ -67,7 +67,7 @@ const furniture = {
     rug:     { x: 210, y: 120, w: 210, h: 170 },
     lamp1:   { x: 220, y: 180, w: 16, h: 50 },   // floor lamp left of couch
     plant:   { x: 460, y: 330, w: 40, h: 60 },    // potted plant bottom-right
-    shelf:   { x: 30, y: 280, w: 80, h: 20 },     // bookshelf
+    shelf:   { x: 20, y: 310, w: 60, h: 90 },     // tall bookshelf bottom-left corner
     poster:  { x: 420, y: 16, w: 90, h: 110 }      // hire me poster on wall
 };
 
@@ -170,8 +170,8 @@ function update() {
 
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len > 0) {
-        dx = (dx / len) * player.speed;
-        dy = (dy / len) * player.speed;
+        dx = (dx / len) * player.speed * dt;
+        dy = (dy / len) * player.speed * dt;
 
         if (Math.abs(dx) > Math.abs(dy)) {
             player.dir = dx > 0 ? 3 : 1;
@@ -185,7 +185,7 @@ function update() {
         else if (canMove(nx, player.y)) { player.x = nx; }
         else if (canMove(player.x, ny)) { player.y = ny; }
 
-        player.frameTimer++;
+        player.frameTimer += dt;
         if (player.frameTimer > 6) {
             player.frame = (player.frame + 1) % 4;
             player.frameTimer = 0;
@@ -195,18 +195,18 @@ function update() {
     }
 
     // Countdown before door/poster activate
-    if (spawnTimer > 0) spawnTimer--;
+    if (spawnTimer > 0) spawnTimer -= dt;
 
     // Door → back to main page
     const door = furniture.door;
-    if (spawnTimer === 0 && Math.abs(player.x - (door.x + door.w / 2)) < 35 && Math.abs(player.y - (door.y + door.h / 2)) < 30) {
+    if (spawnTimer <= 0 && Math.abs(player.x - (door.x + door.w / 2)) < 35 && Math.abs(player.y - (door.y + door.h / 2)) < 30) {
         window.location.href = 'index.html';
         return;
     }
 
     // Poster → hire me page
     const poster = furniture.poster;
-    if (spawnTimer === 0 && Math.abs(player.x - (poster.x + poster.w / 2)) < 50 && Math.abs(player.y - (poster.y + poster.h)) < 30) {
+    if (spawnTimer <= 0 && Math.abs(player.x - (poster.x + poster.w / 2)) < 50 && Math.abs(player.y - (poster.y + poster.h)) < 30) {
         window.location.href = 'index.html#hire';
         return;
     }
@@ -251,7 +251,7 @@ function roundRect(x, y, w, h, r, color) {
 function draw() {
     // Reel selection menu
     if (step === 4) {
-        menuTransition = Math.min(1, menuTransition + 0.03);
+        menuTransition = Math.min(1, menuTransition + 0.03 * dt);
         updateMenu();
         drawMenu();
         return;
@@ -259,7 +259,7 @@ function draw() {
 
     // POV mode — TV + remote view
     if (step === 3) {
-        povTransition = Math.min(1, povTransition + 0.02);
+        povTransition = Math.min(1, povTransition + 0.02 * dt);
         drawPOV();
         return;
     }
@@ -381,13 +381,27 @@ function draw() {
 
     // ── Bookshelf ──
     const shelf = furniture.shelf;
-    rect(shelf.x, shelf.y, shelf.w, shelf.h, '#5c4430');
-    rect(shelf.x, shelf.y, shelf.w, 2, '#7a5a40');
-    // Books
-    const bookColors = ['#aa3333','#3355aa','#33aa55','#aa8833','#7733aa','#33aaaa','#aa5533'];
-    for (let i = 0; i < 7; i++) {
-        const bw = 8 + Math.floor(Math.random() * 0.1); // consistent
-        rect(shelf.x + 4 + i * 11, shelf.y + 3, 9, shelf.h - 5, bookColors[i]);
+    // Back panel
+    rect(shelf.x, shelf.y, shelf.w, shelf.h, '#4a3325');
+    // Side edges
+    rect(shelf.x, shelf.y, 3, shelf.h, '#5c4430');
+    rect(shelf.x + shelf.w - 3, shelf.y, 3, shelf.h, '#5c4430');
+    // Top
+    rect(shelf.x, shelf.y, shelf.w, 3, '#6a5440');
+    // Shelves (4 rows)
+    const bookColors = ['#aa3333','#3355aa','#33aa55','#aa8833','#7733aa','#33aaaa','#aa5533','#cc6644','#4488aa','#88aa33'];
+    for (let row = 0; row < 4; row++) {
+        const sy = shelf.y + 6 + row * 21;
+        // Shelf plank
+        rect(shelf.x + 3, sy + 16, shelf.w - 6, 3, '#6a5440');
+        // Books on this shelf
+        let bx = shelf.x + 5;
+        for (let i = 0; i < 5; i++) {
+            const bw = 7 + (i % 3);
+            const bh = 12 + (i % 2) * 3;
+            rect(bx, sy + 16 - bh, bw, bh, bookColors[(row * 5 + i) % bookColors.length]);
+            bx += bw + 1;
+        }
     }
 
     // ── Kitchen counter ──
@@ -997,11 +1011,11 @@ function backToRoom() {
 }
 
 function updateMenu() {
-    if (menuCooldown > 0) menuCooldown--;
+    if (menuCooldown > 0) menuCooldown -= dt;
 
     // Auto-cycle through categories every 60 frames (~1 second)
     if (autoCycleActive) {
-        autoCycleTimer++;
+        autoCycleTimer += dt;
         if (autoCycleTimer >= 60) {
             autoCycleTimer = 0;
             menuSelection = (menuSelection + 1) % reelCategories.length;
@@ -1228,9 +1242,14 @@ videoBackBtn.addEventListener('click', () => {
 // ── Game Loop ───────────────────────────────────────────────────────
 
 let loopRunning = false;
-function loop() {
+let lastTime = performance.now();
+let dt = 1;
+function loop(now) {
     if (!running) { loopRunning = false; return; }
     loopRunning = true;
+    const elapsed = now - lastTime;
+    lastTime = now;
+    dt = Math.min(elapsed / (1000 / 60), 3);
     update();
     draw();
     requestAnimationFrame(loop);
@@ -1238,7 +1257,8 @@ function loop() {
 
 function startLoop() {
     running = true;
-    if (!loopRunning) loop();
+    lastTime = performance.now();
+    if (!loopRunning) requestAnimationFrame(loop);
 }
 
 startLoop();
