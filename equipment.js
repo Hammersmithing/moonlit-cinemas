@@ -1212,6 +1212,9 @@ function draw() {
         }
     }
 
+    // Egyptian set pieces — south-west of sand lot
+    drawPyramids();
+
     // Dirt work site around rocket and cranes
     px(dirtCX - dirtW / 2, dirtCY - dirtH / 2, dirtW, dirtH, C.dirt);
     // Subtle variation patches on the dirt (clamped to boundary)
@@ -1583,6 +1586,106 @@ function drawBuilding(x, y, label) {
 
     // Label on entablature
     pxText(label, x, y - bh / 2 + 3, '#4a3a2a', 10);
+}
+
+function drawPyramids() {
+    const s = PIXEL;
+    const baseX = sandLot.x + 30;
+    const baseY = sandLot.y + sandLot.h - 40;
+
+    // Large pyramid (back)
+    const p1x = baseX + 20, p1y = baseY - 20;
+    const p1w = 60, p1h = 45;
+    const lx1 = (p1x - cam.x) * s, ly1 = (p1y + p1h - cam.y) * s;
+    const peakY1 = (p1y - cam.y) * s;
+    const peakX1 = (p1x + p1w / 2 - cam.x) * s;
+    const rx1 = (p1x + p1w - cam.x) * s;
+    // Shadow side (left face)
+    ctx.fillStyle = '#b8a050';
+    ctx.beginPath();
+    ctx.moveTo(lx1, ly1);
+    ctx.lineTo(peakX1, peakY1);
+    ctx.lineTo(peakX1, ly1);
+    ctx.closePath();
+    ctx.fill();
+    // Light side (right face)
+    ctx.fillStyle = '#d4be6a';
+    ctx.beginPath();
+    ctx.moveTo(rx1, ly1);
+    ctx.lineTo(peakX1, peakY1);
+    ctx.lineTo(peakX1, ly1);
+    ctx.closePath();
+    ctx.fill();
+    // Base line
+    px(p1x, p1y + p1h, p1w, 1, '#8a7a40');
+
+    // Small pyramid (front-right)
+    const p2x = baseX + 65, p2y = baseY;
+    const p2w = 35, p2h = 25;
+    const lx2 = (p2x - cam.x) * s, ly2 = (p2y + p2h - cam.y) * s;
+    const peakY2 = (p2y - cam.y) * s;
+    const peakX2 = (p2x + p2w / 2 - cam.x) * s;
+    const rx2 = (p2x + p2w - cam.x) * s;
+    ctx.fillStyle = '#b8a050';
+    ctx.beginPath();
+    ctx.moveTo(lx2, ly2);
+    ctx.lineTo(peakX2, peakY2);
+    ctx.lineTo(peakX2, ly2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#d4be6a';
+    ctx.beginPath();
+    ctx.moveTo(rx2, ly2);
+    ctx.lineTo(peakX2, peakY2);
+    ctx.lineTo(peakX2, ly2);
+    ctx.closePath();
+    ctx.fill();
+    px(p2x, p2y + p2h, p2w, 1, '#8a7a40');
+
+    // Tiny pyramid (far back-left)
+    const p3x = baseX - 10, p3y = baseY - 35;
+    const p3w = 22, p3h = 16;
+    const lx3 = (p3x - cam.x) * s, ly3 = (p3y + p3h - cam.y) * s;
+    const peakY3 = (p3y - cam.y) * s;
+    const peakX3 = (p3x + p3w / 2 - cam.x) * s;
+    const rx3 = (p3x + p3w - cam.x) * s;
+    ctx.fillStyle = '#b8a050';
+    ctx.beginPath();
+    ctx.moveTo(lx3, ly3);
+    ctx.lineTo(peakX3, peakY3);
+    ctx.lineTo(peakX3, ly3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#d4be6a';
+    ctx.beginPath();
+    ctx.moveTo(rx3, ly3);
+    ctx.lineTo(peakX3, peakY3);
+    ctx.lineTo(peakX3, ly3);
+    ctx.closePath();
+    ctx.fill();
+    px(p3x, p3y + p3h, p3w, 1, '#8a7a40');
+
+    // Sphinx — in front of large pyramid
+    const spx = baseX + 5, spy = baseY + 10;
+    // Body (reclining)
+    px(spx, spy + 4, 28, 8, '#c4a858');
+    px(spx + 2, spy + 3, 24, 2, '#c4a858');
+    // Front paws
+    px(spx + 22, spy + 6, 8, 6, '#b89848');
+    px(spx + 24, spy + 10, 6, 3, '#b89848');
+    // Head (upright)
+    px(spx + 18, spy - 6, 10, 12, '#c4a858');
+    // Headdress sides
+    px(spx + 16, spy - 4, 3, 10, '#aa8838');
+    px(spx + 27, spy - 4, 3, 10, '#aa8838');
+    // Face details
+    px(spx + 20, spy - 3, 2, 1, '#3a3020'); // eye
+    px(spx + 25, spy - 3, 2, 1, '#3a3020'); // eye
+    px(spx + 22, spy - 1, 3, 1, '#b09040'); // nose
+    px(spx + 21, spy + 1, 5, 1, '#9a8030'); // mouth
+    // Headdress top
+    px(spx + 19, spy - 8, 8, 3, '#aa8838');
+    px(spx + 20, spy - 10, 6, 3, '#c4a858');
 }
 
 function drawFence() {
