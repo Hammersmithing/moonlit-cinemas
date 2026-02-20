@@ -263,9 +263,9 @@ for (let x = -250; x <= 250; x += 18 + Math.floor(Math.random() * 12)) {
 
 const BB_OFFSET = ROAD_W / 2 + 34;
 const billboards = [
-    { label: 'GRIP GEAR', sublabel: 'Stands & Rigging', direction: 'Turn Right', arrow: '\u2192', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 100 },
-    { label: 'LIGHTS', sublabel: 'Fixtures & Mods', direction: 'Turn Left', arrow: '\u2190', x: CROSS_X - BB_OFFSET, y: CROSS_Y + 210 },
-    { label: 'EQUIPMENT', sublabel: 'Full Inventory', direction: 'Straight Ahead', arrow: '\u2191', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 320 }
+    { label: 'EQUIPMENT', direction: 'Straight Ahead', arrow: '\u2191', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 100 },
+    { label: 'LIGHTS', sublabel: 'Stage 2', direction: 'Turn Left', arrow: '\u2190', x: CROSS_X - BB_OFFSET, y: CROSS_Y + 210 },
+    { label: 'GRIP GEAR', sublabel: 'Stage 1', direction: 'Turn Left', arrow: '\u2190', x: CROSS_X + BB_OFFSET, y: CROSS_Y + 320 }
 ];
 
 // Billboard light flash state (next billboard flickers when you pass one)
@@ -299,6 +299,15 @@ for (let i = scenery.length - 1; i >= 0; i--) {
             scenery.splice(i, 1);
             break;
         }
+    }
+}
+
+// Remove trees behind courthouse (back two rows)
+const courtY = CROSS_Y - ZONE_DIST - 20;
+for (let i = scenery.length - 1; i >= 0; i--) {
+    const s = scenery[i];
+    if (Math.abs(s.x - CROSS_X) < 80 && s.y < courtY + 20 && s.y > courtY - 80) {
+        scenery.splice(i, 1);
     }
 }
 
@@ -344,9 +353,7 @@ const workLights = [
 
 // Destination buildings
 const destinations = [
-    { label: 'EQUIPMENT', x: CROSS_X, y: CROSS_Y - ZONE_DIST - 20, dir: 'straight' },
-    { label: 'LIGHTS', x: CROSS_X - ZONE_DIST - 20, y: CROSS_Y, dir: 'left' },
-    { label: 'GRIP', x: CROSS_X + ZONE_DIST + 20, y: CROSS_Y, dir: 'right' }
+    { label: 'EQUIPMENT', x: CROSS_X, y: CROSS_Y - ZONE_DIST - 20, dir: 'straight' }
 ];
 
 // ── Inventory Data ──────────────────────────────────────────────────
@@ -1101,6 +1108,24 @@ function update(dt) {
             break;
         }
     }
+    // Stage 1 → grip inventory
+    const s1 = soundStages[0];
+    const s1dx = car.x - s1.x;
+    const s1dy = car.y - (s1.y + 25);
+    if (Math.sqrt(s1dx * s1dx + s1dy * s1dy) < 18) {
+        arrived = 'right';
+        running = false;
+        showInventory('right');
+    }
+    // Stage 2 → lights inventory
+    const s2 = soundStages[1];
+    const s2dx = car.x - s2.x;
+    const s2dy = car.y - (s2.y + 25);
+    if (Math.sqrt(s2dx * s2dx + s2dy * s2dy) < 18) {
+        arrived = 'left';
+        running = false;
+        showInventory('left');
+    }
 }
 
 // ── Time-of-Day Lighting ───────────────────────────────────────────
@@ -1198,6 +1223,11 @@ function draw() {
     // Draw roads
     drawRoads();
 
+    // Draw destination buildings (before trees so trees layer on top)
+    for (const dest of destinations) {
+        drawBuilding(dest.x, dest.y, dest.label);
+    }
+
     // Draw scenery (trees)
     const sorted = [...scenery].sort((a, b) => a.y - b.y);
     for (const s of sorted) {
@@ -1223,11 +1253,6 @@ function draw() {
     // Draw billboards (behind car if above, in front if below)
     for (let i = 0; i < billboards.length; i++) {
         if (billboards[i].y < car.y) drawBillboard(billboards[i], bbFlash[i]);
-    }
-
-    // Draw destination buildings
-    for (const dest of destinations) {
-        drawBuilding(dest.x, dest.y, dest.label);
     }
 
     // Draw sound stages (always behind car)
@@ -1479,14 +1504,74 @@ function drawSoundStage(stage) {
 }
 
 function drawBuilding(x, y, label) {
-    // Building body
-    px(x - 14, y - 10, 28, 18, C.building);
-    // Roof
-    px(x - 16, y - 12, 32, 4, C.buildingRoof);
-    // Door
-    px(x - 2, y + 2, 5, 6, C.buildingDoor);
-    // Label
-    pxText(label, x, y - 5, C.white, 9);
+    // Grand Hollywood courthouse
+    const bw = 80, bh = 55;
+
+    // Main stone facade
+    px(x - bw / 2, y - bh / 2, bw, bh, '#c8b898');
+    // Darker base
+    px(x - bw / 2, y + bh / 2 - 6, bw, 6, '#a89878');
+
+    // Columns (6 evenly spaced)
+    for (let i = 0; i < 6; i++) {
+        const cx = x - bw / 2 + 8 + i * 13;
+        px(cx, y - bh / 2 + 10, 3, bh - 16, '#d8cca8');
+        // Column cap
+        px(cx - 1, y - bh / 2 + 9, 5, 2, '#d8cca8');
+        // Column base
+        px(cx - 1, y + bh / 2 - 7, 5, 2, '#b8a888');
+    }
+
+    // Entablature (horizontal band above columns)
+    px(x - bw / 2, y - bh / 2 + 6, bw, 4, '#b8a888');
+
+    // Pediment (triangular roof)
+    const peakY = y - bh / 2 - 10;
+    const roofL = x - bw / 2 - 2;
+    const roofR = x + bw / 2 + 2;
+    const sx = PIXEL;
+    const pxLeft = (roofL - cam.x) * sx;
+    const pxRight = (roofR - cam.x) * sx;
+    const pxPeakX = (x - cam.x) * sx;
+    const pxPeakY = (peakY - cam.y) * sx;
+    const pxBaseY = (y - bh / 2 + 6 - cam.y) * sx;
+    ctx.fillStyle = '#b8a888';
+    ctx.beginPath();
+    ctx.moveTo(pxLeft, pxBaseY);
+    ctx.lineTo(pxPeakX, pxPeakY);
+    ctx.lineTo(pxRight, pxBaseY);
+    ctx.closePath();
+    ctx.fill();
+    // Tympanum (inner triangle, lighter)
+    ctx.fillStyle = '#d0c4a0';
+    ctx.beginPath();
+    ctx.moveTo(pxLeft + 6 * sx, pxBaseY);
+    ctx.lineTo(pxPeakX, pxPeakY + 4 * sx);
+    ctx.lineTo(pxRight - 6 * sx, pxBaseY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Grand double doors
+    px(x - 5, y + bh / 2 - 14, 4, 14, '#6b4e2a');
+    px(x + 1, y + bh / 2 - 14, 4, 14, '#6b4e2a');
+    // Door frame
+    px(x - 6, y + bh / 2 - 15, 12, 1, '#8a7a5a');
+    px(x - 6, y + bh / 2 - 15, 1, 15, '#8a7a5a');
+    px(x + 5, y + bh / 2 - 15, 1, 15, '#8a7a5a');
+
+    // Steps (3 wide steps in front)
+    px(x - 12, y + bh / 2, 24, 2, '#b8a888');
+    px(x - 15, y + bh / 2 + 2, 30, 2, '#a89878');
+    px(x - 18, y + bh / 2 + 4, 36, 2, '#988868');
+
+    // Windows (dark recesses between columns)
+    for (let i = 0; i < 5; i++) {
+        const wx = x - bw / 2 + 12 + i * 13;
+        px(wx, y - bh / 2 + 14, 5, 8, '#4a4030');
+    }
+
+    // Label on entablature
+    pxText(label, x, y - bh / 2 + 3, '#4a3a2a', 10);
 }
 
 function drawStreetLamp(x, y) {
@@ -1795,7 +1880,9 @@ function drawBillboard(bb, flash) {
     }
 
     // Label
-    pxText(bb.label, bb.x, bb.y - bh + 22, C.white, 13);
+    pxText(bb.label, bb.x, bb.y - bh + 20, C.white, 13);
+    // Sublabel (if present)
+    if (bb.sublabel) pxText(bb.sublabel, bb.x, bb.y - bh + 30, '#ccddbb', 10);
 }
 
 function drawCar() {
@@ -1932,11 +2019,26 @@ invBackBtn.addEventListener('click', () => {
     invOverlay.classList.add('hidden');
     if (joystickZone && isTouchDevice) joystickZone.style.display = 'block';
 
-    // Reset car on the approach road, facing forward (up)
-    car.x = CROSS_X;
-    car.y = rocket.y - 50;
+    // Spawn car outside the building it just entered, facing away
+    if (arrived === 'straight') {
+        // EQUIPMENT courthouse — spawn south of steps facing down
+        car.x = CROSS_X;
+        car.y = CROSS_Y - ZONE_DIST - 20 + 40;
+        car.angle = Math.PI / 2;
+    } else if (arrived === 'right') {
+        // Stage 1 — spawn south of door facing down
+        const s1 = soundStages[0];
+        car.x = s1.x;
+        car.y = s1.y + 25 + 25;
+        car.angle = Math.PI / 2;
+    } else if (arrived === 'left') {
+        // Stage 2 — spawn south of door facing down
+        const s2 = soundStages[1];
+        car.x = s2.x;
+        car.y = s2.y + 25 + 25;
+        car.angle = Math.PI / 2;
+    }
     car.speed = 0;
-    car.angle = -Math.PI / 2;
     arrived = null;
     running = true;
     lastTime = performance.now();
